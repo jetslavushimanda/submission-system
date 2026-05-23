@@ -1,0 +1,941 @@
+/* ═══════════════════════════════════════════════════════════════
+   main.css — shared styles
+   JETS 2024-2026 Online Submission System
+   Lavushimanda District | Muchinga Region
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Variables ───────────────────────────────────────────────── */
+:root {
+  --green:        #1a5c2a;
+  --green-dark:   #0d3d1a;
+  --green-light:  #e8f5ec;
+  --blue:         #1a3c6e;
+  --blue-dark:    #0d2347;
+  --blue-light:   #e8eef7;
+  --text:         #1a1a1a;
+  --text-muted:   #555;
+  --border:       #d0d0d0;
+  --bg:           #f0f2f5;
+  --white:        #ffffff;
+  --shadow:       0 4px 16px rgba(0, 0, 0, 0.18);
+  --radius:       12px;
+  --radius-sm:    8px;
+  --font:         'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Base ────────────────────────────────────────────────────── */
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Page System ─────────────────────────────────────────────── */
+.page {
+  display: none;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.page.active {
+  display: flex;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDING PAGE
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Header ──────────────────────────────────────────────────── */
+.landing-header {
+  background: linear-gradient(160deg, #0d6e25 0%, var(--green) 45%, var(--green-dark) 100%);
+  color: var(--white);
+  padding: 28px 20px 24px;
+  text-align: center;
+}
+
+/* Logos + Title row */
+.header-logos {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.header-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px;
+  display: block;
+}
+
+/* Fallback when image fails to load */
+.header-logo.logo-missing {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+}
+
+.logo-label {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  font-weight: 500;
+}
+
+/* Centre title block */
+.header-title-block {
+  flex: 1;
+  padding-top: 4px;
+}
+
+.header-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  line-height: 1.15;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.header-subtitle {
+  font-size: 15px;
+  font-weight: 400;
+  opacity: 0.88;
+  margin-top: 3px;
+  letter-spacing: 0.5px;
+}
+
+/* District & Theme lines */
+.header-district {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+}
+
+.header-theme {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.72;
+  line-height: 1.55;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+/* ── Main (buttons) ──────────────────────────────────────────── */
+.landing-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 20px 24px;
+  gap: 16px;
+}
+
+.select-prompt {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* Submission buttons */
+.btn-submit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 360px;
+  padding: 24px 20px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--white);
+  box-shadow: var(--shadow);
+  gap: 5px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  text-align: center;
+}
+
+.btn-submit:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1;
+}
+
+.btn-role {
+  font-size: 13px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.btn-school-submit {
+  background: linear-gradient(145deg, #1f7032, var(--green), var(--green-dark));
+}
+
+.btn-zone-submit {
+  background: linear-gradient(145deg, #1f4a88, var(--blue), var(--blue-dark));
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.landing-footer {
+  background: #222;
+  color: #ccc;
+  text-align: center;
+  padding: 14px 20px;
+}
+
+.footer-help {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e8e8e8;
+}
+
+.footer-credit {
+  font-size: 11px;
+  opacity: 0.5;
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHARED FORM UTILITIES
+   (used by both school-form.js and zone-form.js renders)
+═══════════════════════════════════════════════════════════════ */
+
+/* Form page top bar (back button + title) */
+.form-topbar {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  color: var(--white);
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.btn-back {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: var(--white);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.btn-back:active {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.topbar-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* Form body */
+.form-body {
+  flex: 1;
+  padding: 20px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Cards */
+.form-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  font-size: 16px;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--white);
+  width: 100%;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(26, 92, 42, 0.12);
+}
+
+.field input[readonly],
+.field select[disabled] {
+  background: #f7f7f7;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Info row (read-only school details) */
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 15px;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.info-value {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Submit button */
+.btn-form-submit {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--white);
+  cursor: pointer;
+  letter-spacing: 0.8px;
+  box-shadow: var(--shadow);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease;
+}
+
+.btn-form-submit:active {
+  transform: scale(0.98);
+}
+
+/* Status / alert messages */
+.alert {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.alert-error {
+  background: #fdecea;
+  color: #b71c1c;
+  border: 1px solid #f5c6c6;
+}
+
+.alert-success {
+  background: #e8f5ec;
+  color: #145a23;
+  border: 1px solid #b2dfbc;
+}
+
+.alert-info {
+  background: #e8eef7;
+  color: #0d2347;
+  border: 1px solid #b3c6e0;
+}
+
+/* Loading spinner */
+.spinner {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-top-color: var(--white);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIGN-IN OVERLAY
+═══════════════════════════════════════════════════════════════ */
+
+.signin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.signin-overlay.hidden {
+  display: none;
+}
+
+.signin-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.signin-mode-badge {
+  display: inline-block;
+  padding: 5px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.badge-school {
+  background: var(--green-light);
+  color: var(--green);
+}
+
+.badge-zone {
+  background: var(--blue-light);
+  color: var(--blue);
+}
+
+.signin-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.signin-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.google-btn-wrap {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signin-gsi-loading {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.btn-signin-cancel {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-signin-cancel:active {
+  background: var(--bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTH STATUS PAGE (loading / error states)
+═══════════════════════════════════════════════════════════════ */
+
+.auth-status-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.auth-status-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Masked Gmail pill */
+.auth-gmail-pill {
+  display: inline-block;
+  background: #f0f2f5;
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+/* Loading state */
+.auth-checking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner-dark {
+  width: 36px;
+  height: 36px;
+  border: 4px solid #e0e0e0;
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.auth-checking-text {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* Auth action buttons */
+.btn-auth-action {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-auth-action.btn-retry {
+  background: var(--green);
+  color: var(--white);
+}
+
+.btn-auth-action.btn-retry:active {
+  background: var(--green-dark);
+}
+
+.btn-signout-text {
+  background: none;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.btn-back-home {
+  background: var(--bg);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+
+/* Sign-out link on active forms */
+.btn-signout-form {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: var(--white);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-signout-form:active {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCHOOL / ZONE FORM — SHARED COMPONENTS
+   Colors are overridden per-form in school.css / zone.css
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Form Header (logo bar + signed-in strip) ────────────────── */
+.sf-header {
+  text-align: center;
+  padding: 18px 16px 0;
+}
+
+.sf-header-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sf-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.15);
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.sf-logo.logo-missing {
+  border: 2px dashed rgba(255,255,255,0.4);
+}
+
+.sf-header-text { flex: 1; }
+
+.sf-h-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  line-height: 1.2;
+}
+
+.sf-h-sub {
+  font-size: 13px;
+  opacity: 0.88;
+  margin-top: 1px;
+}
+
+.sf-h-district {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 3px;
+}
+
+.sf-signedin-bar {
+  font-size: 13px;
+  padding: 8px 16px;
+  margin-top: 10px;
+  opacity: 0.9;
+}
+
+/* ── Form Body ───────────────────────────────────────────────── */
+.sf-body {
+  padding: 16px 14px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sf-wrong-details {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* ── Slot Progress Bar ───────────────────────────────────────── */
+.sf-slot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sf-slot-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sf-slot-display {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sf-slot-track {
+  height: 10px;
+  background: #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sf-slot-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: var(--green);
+  transition: width 0.4s ease;
+}
+
+.sf-slot-fill.sf-slot-warn { background: #e67e00; }
+.sf-slot-fill.sf-slot-full { background: #c0392b; }
+
+.sf-slot-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  text-align: right;
+}
+
+/* ── Tab Bar ─────────────────────────────────────────────────── */
+.sf-tab-bar {
+  display: flex;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.sf-tab-btn {
+  flex: 1;
+  padding: 13px 6px;
+  border: none;
+  background: #e8e8e8;
+  color: #555;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.3;
+}
+
+.sf-tab-btn:not(:last-child) {
+  border-right: 1px solid #d0d0d0;
+}
+
+.sf-tab-panel { display: block; }
+.sf-tab-panel.hidden { display: none; }
+
+/* ── Radio Groups ────────────────────────────────────────────── */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.radio-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: #fafafa;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.radio-opt input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+  flex-shrink: 0;
+}
+
+/* ── Required asterisk ───────────────────────────────────────── */
+.req {
+  color: #c0392b;
+  margin-left: 2px;
+}
+
+/* ── File field hint ─────────────────────────────────────────── */
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── Declaration ─────────────────────────────────────────────── */
+.decl-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.decl-checkbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: var(--green);
+}
+
+.decl-text {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.decl-meta {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Submit Area ─────────────────────────────────────────────── */
+.sf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 20px;
+}
+
+.btn-add-another {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--white);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-retry {
+  width: 100%;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── WhatsApp confirmation button ────────────────────────────── */
+.btn-whatsapp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: #25d366;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-whatsapp:active {
+  background: #1aad54;
+}
+
+/* ── Utility ─────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

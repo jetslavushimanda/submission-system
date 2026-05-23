@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a5c2a" />
+  <meta name="description" content="JETS 2024-2026 Online Submission System — Lavushimanda District, Muchinga Region" />
+  <title>JETS 2024–2026 | Lavushimanda District</title>
+
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/school.css" />
+  <link rel="stylesheet" href="css/zone.css" />
+
+  <!-- Google Identity Services (Sign-In) -->
+  <!-- onGoogleLibraryLoad fires as soon as the GSI script is ready -->
+  <script>
+    window.onGoogleLibraryLoad = function () {
+      if (window.App) App.initGSI();
+      else window._gsiPending = true;
+    };
+  </script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- ═══════════════════════════ LANDING PAGE ═══════════════════════════ -->
+  <div id="page-landing" class="page active">
+
+    <header class="landing-header">
+      <div class="header-logos">
+        <div class="logo-wrap">
+          <img src="assets/coat-of-arms.png"
+               alt="Zambia Coat of Arms"
+               class="header-logo"
+               onerror="this.classList.add('logo-missing')" />
+          <span class="logo-label">Coat of Arms</span>
+        </div>
+
+        <div class="header-title-block">
+          <h1 class="header-title">JETS 2024–2026</h1>
+          <p class="header-subtitle">Submission System</p>
+        </div>
+
+        <div class="logo-wrap">
+          <img src="assets/jets-logo.png"
+               alt="JETS Logo"
+               class="header-logo"
+               onerror="this.classList.add('logo-missing')" />
+          <span class="logo-label">JETS</span>
+        </div>
+      </div>
+
+      <p class="header-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
+      <p class="header-theme">
+        "Promoting Innovation, Engineering and Entrepreneurship:<br />
+        Accelerating STEM Growth and Development"
+      </p>
+    </header>
+
+    <main class="landing-main">
+      <p class="select-prompt">Select your submission type:</p>
+
+      <button class="btn-submit btn-school-submit" id="btn-open-school">
+        <span class="btn-title">SCHOOL SUBMISSION</span>
+        <span class="btn-role">School JETS Organiser</span>
+      </button>
+
+      <button class="btn-submit btn-zone-submit" id="btn-open-zone">
+        <span class="btn-title">ZONE SUBMISSION</span>
+        <span class="btn-role">Zonal JETS Coordinator</span>
+      </button>
+    </main>
+
+    <footer class="landing-footer">
+      <p class="footer-help">For assistance contact the District JETS Organiser</p>
+      <p class="footer-credit">Ministry of Education &nbsp;&middot;&nbsp; National Science Centre &nbsp;&middot;&nbsp; 2024–2026</p>
+    </footer>
+
+  </div><!-- /#page-landing -->
+
+
+  <!-- ═══════════════════════════ SCHOOL FORM PAGE ═══════════════════════════ -->
+  <div id="page-school" class="page">
+    <!-- Rendered by js/school-form.js -->
+  </div>
+
+
+  <!-- ═══════════════════════════ ZONE FORM PAGE ═══════════════════════════ -->
+  <div id="page-zone" class="page">
+    <!-- Rendered by js/zone-form.js -->
+  </div>
+
+
+  <!-- ═══════════════════════════ SIGN-IN OVERLAY ════════════════════════ -->
+  <div id="signin-overlay" class="signin-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="signin-title">
+    <div class="signin-card">
+
+      <div id="signin-mode-badge" class="signin-mode-badge"></div>
+
+      <h2 class="signin-title" id="signin-title">Sign In to Continue</h2>
+      <p class="signin-desc">Use your registered Gmail account to access the submission form.</p>
+
+      <!-- Google Sign-In button rendered here by GSI -->
+      <div id="google-signin-btn" class="google-btn-wrap"></div>
+
+      <p id="signin-gsi-loading" class="signin-gsi-loading hidden">Loading Google Sign-In...</p>
+
+      <button class="btn-signin-cancel" id="btn-signin-cancel">Cancel</button>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════════ -->
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/school-form.js"></script>
+  <script src="js/zone-form.js"></script>
+
+</body>
+</html>

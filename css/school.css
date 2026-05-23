@@ -1,0 +1,66 @@
+/* ═══════════════════════════════════════════════════════════════
+   school.css — School JETS Organiser form (green theme)
+   Lavushimanda District JETS 2024-2026
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Topbar ──────────────────────────────────────────────────── */
+#page-school .form-topbar {
+  background: linear-gradient(135deg, #1f7032, #1a5c2a, #0d3d1a);
+}
+
+/* ── Form Header ─────────────────────────────────────────────── */
+#page-school .sf-header {
+  background: linear-gradient(160deg, #1f7032, #1a5c2a, #0d3d1a);
+  color: #ffffff;
+  padding-bottom: 16px;
+}
+
+#page-school .sf-signedin-bar {
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 8px 16px;
+}
+
+/* ── Card title accent ───────────────────────────────────────── */
+#page-school .card-title {
+  color: #1a5c2a;
+  border-bottom-color: #b2dfbc;
+}
+
+/* ── Field focus ─────────────────────────────────────────────── */
+#page-school .field input:focus,
+#page-school .field select:focus,
+#page-school .field textarea:focus {
+  border-color: #1a5c2a;
+  box-shadow: 0 0 0 3px rgba(26, 92, 42, 0.12);
+}
+
+/* ── Radio accent ────────────────────────────────────────────── */
+#page-school .radio-opt input[type="radio"] {
+  accent-color: #1a5c2a;
+}
+
+#page-school .decl-checkbox {
+  accent-color: #1a5c2a;
+}
+
+/* ── Active tab ──────────────────────────────────────────────── */
+#page-school .sf-tab-btn.active {
+  background: #1a5c2a;
+  color: #ffffff;
+}
+
+/* ── Slot bar ────────────────────────────────────────────────── */
+#page-school .sf-slot-fill {
+  background: #1a5c2a;
+}
+
+/* ── Submit button ───────────────────────────────────────────── */
+#page-school .btn-form-submit {
+  background: linear-gradient(135deg, #1f7032, #1a5c2a, #0d3d1a);
+}
+
+/* ── Add Another button ──────────────────────────────────────── */
+#page-school .btn-add-another {
+  background: linear-gradient(135deg, #1f7032, #1a5c2a, #0d3d1a);
+}
