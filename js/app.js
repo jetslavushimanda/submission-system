@@ -7,7 +7,7 @@
 //   GOOGLE_CLIENT_ID — paste the OAuth 2.0 Client ID from Google Cloud Console
 // ═══════════════════════════════════════════════════════════════
 
-const APPS_SCRIPT_URL  = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const APPS_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREFy7dLZRkMfT3BjN-_FX6cTdPg4OG-aDK2U-dCl0E5-Q8wNNGxQ0lurw/exec";
 const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID_HERE";
 
 const SESSION_KEY = "jets_session";
