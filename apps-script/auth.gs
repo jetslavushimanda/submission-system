@@ -34,25 +34,32 @@ var COL_STATUS = 5;  // F
 //
 // Called by Code.gs which translates this into the status-based
 // shape that app.js expects before sending to the client.
+// Strips spaces, dashes, and leading zeros for a reliable comparison.
+function normalizePhone_(p) {
+  return p.toString().replace(/[\s\-]/g, '').replace(/^0+/, '');
+}
+
 function checkRegistration(phone) {
   if (!phone) return { found: false };
 
-  var phoneTrim = phone.toString().trim();
+  var phoneNorm = normalizePhone_(phone);
+  Logger.log('checkRegistration called with: ' + phone + ' (normalized: ' + phoneNorm + ')');
 
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_REGISTERED);
-  if (!sheet) return { found: false };
+  if (!sheet) { Logger.log('Sheet tab not found'); return { found: false }; }
 
   var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { found: false };
+  if (lastRow < 2) { Logger.log('No data rows in sheet'); return { found: false }; }
 
   // Fetch all 6 columns in one call — avoids per-row API round-trips
   var rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  Logger.log('Total rows read: ' + rows.length);
 
   for (var i = 0; i < rows.length; i++) {
     var row      = rows[i];
-    var rowPhone = row[COL_PHONE].toString().trim();
+    var rowPhone = normalizePhone_(row[COL_PHONE]);
 
-    if (rowPhone !== phoneTrim) continue;
+    if (rowPhone !== phoneNorm) continue;
 
     // Phone matched — check Status before returning any data
     var status = row[COL_STATUS].toString().trim();
