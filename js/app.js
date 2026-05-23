@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 const APPS_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREFy7dLZRkMfT3BjN-_FX6cTdPg4OG-aDK2U-dCl0E5-Q8wNNGxQ0lurw/exec";
-const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID_HERE";
+const GOOGLE_CLIENT_ID = "168358018288-f7djhi07in6j9e7js7datp8gir3pc9k7.apps.googleusercontent.com";
 
 const SESSION_KEY = "jets_session";
 
