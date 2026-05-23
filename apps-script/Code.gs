@@ -303,6 +303,8 @@ function setupSystem() {
     ['Mwelushi', 'Chibali Primary',         'Primary School',     'PENDING', 'PENDING', 'Inactive'],
   ];
 
+  // Force phone column (E) to plain text BEFORE writing so leading zeros are kept
+  tab1.getRange(2, 5, schoolRows.length, 1).setNumberFormat('@');
   tab1.getRange(2, 1, schoolRows.length, 6).setValues(schoolRows);
 
   // Header: dark green / white bold
@@ -419,6 +421,100 @@ function setupSystem() {
     'Folder ID  : ' + mainFolderId + '\n\n' +
     'Open View → Execution log for full details.'
   );
+}
+
+// ── reloadSchoolData ──────────────────────────────────────────
+// Run this from the Apps Script editor to reload Tab 1 data into
+// the existing sheet without creating a new one.
+// Use this if phone numbers were saved without leading zeros.
+function reloadSchoolData() {
+  var ss   = SpreadsheetApp.openById(SHEET_ID);
+  var tab1 = ss.getSheetByName(TAB_REGISTERED);
+  if (!tab1) { Logger.log('Tab "Registered Schools" not found.'); return; }
+
+  var schoolRows = [
+    ['DISTRICT','DEC','DEC','Mukuka Davy','0977768103','Active'],
+    ['DISTRICT','DEC','DEC','Nakamba Gladys','0974245077','Active'],
+    ['DISTRICT','DEC','DEC','Namwinga Dorica','0978466186','Active'],
+    ['DISTRICT','DEC','DEC','Tafuna Alex','0977202388','Active'],
+    ['DISTRICT','DEC','DEC','Kaleya Justin','0979563644','Active'],
+    ['DISTRICT','DEC','DEC','Mwansa Gibson','0973375828','Active'],
+    ['DISTRICT','DEC','DEC','Chuma Chomi','0979160918','Active'],
+    ['DISTRICT','DEC','DEC','Chanda Emeldah','0772524170','Active'],
+    ['DISTRICT','DEC','DEC','Mukamba Ruth','0961980482','Active'],
+    ['DISTRICT','DEC','DEC','Chilunga Linda','0955379572','Active'],
+    ['Chiundaponde','Chiundaponde Secondary','Secondary School','Kaluba Moses','0955756491','Active'],
+    ['Kalonje','Kalonje Secondary','Secondary School','Simbaya Felix','0975732550','Active'],
+    ['Lukulu','Lukulu Day Secondary','Secondary School','Silomba Frank','0968875977','Active'],
+    ['Mpumba','Mpumba Primary','Primary School','Siafunda Carlos','0776337582','Active'],
+    ['Mwelushi','Kapilya Open Centre','Open Centre School','Chipwepwe Nelson','0974525316','Active'],
+    ['Mpumba','Kapengwe Open Centre','Open Centre School','Kashishi Sydney','0972099165','Active'],
+    ['Mpumba','Mpumba Primary','Primary School','Siafunda Carlos','0972086640','Active'],
+    ['Mpumba','Muchelenje Open Centre','Open Centre School','Banda Grandson','0979865581','Active'],
+    ['Mpumba','Mununga Primary','Primary School','Moonga Choonya','0974851171','Active'],
+    ['Mpumba','Mununga Secondary','Secondary School','Sota Charles','0970179112','Active'],
+    ['Mpumba','Mwenda Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mpumba','Red Rhino Secondary','Secondary School','Mwalimu Musatwe','0972291796','Active'],
+    ['Mpumba','Salamo Primary','Primary School','Phiri Silvester','0974791924','Active'],
+    ['Mpumba','Salamo Secondary','Secondary School','Loloma Gimel','0974654057','Active'],
+    ['Mpumba','Tubondo Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mpumba','Khem Private School','Private School','PENDING','PENDING','Inactive'],
+    ['Mpumba','St. Rochester Private School','Private School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Chiundaponde Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Lulimala Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Chifinshi Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Makanga Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Ngweshi Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Chiundaponde','Chiundaponde Secondary','Secondary School','PENDING','PENDING','Inactive'],
+    ['Lukulu','Chito Primary','Primary School','Chavula Alex','0962087974','Active'],
+    ['Lukulu','Kapololo Primary','Primary School','Chola Christine','0775158648','Active'],
+    ['Lukulu','Kapwanya Primary','Primary School','Banda Elias','0978600778','Active'],
+    ['Lukulu','Lukulu Primary','Primary School','Kanchela Bertha','0977155763','Active'],
+    ['Lukulu','Lukulu Day Secondary','Secondary School','Kasakula Ackson','0966406465','Active'],
+    ['Lukulu','Mabonga Primary','Primary School','Mupinde Patrick','0978935433','Active'],
+    ['Lukulu','Mpomfu Primary','Primary School','Mubanga Max','0965573696','Active'],
+    ['Lukulu','Nsansha Primary','Primary School','Mtonga Hambe','0967329360','Active'],
+    ['Kalonje','Chilebela Primary','Primary School','Sichone Jane','0950934985','Active'],
+    ['Kalonje','Finkuli Open Centre','Open Centre School','Sabi Fridah','0977672828','Active'],
+    ['Kalonje','Kalonje Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Kalonje','Kalonje Secondary','Secondary School','Chilunga Mwape Linda','0955379572','Active'],
+    ['Kalonje','Kamwendo Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Kalonje','Mabyulu Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Kalonje','Mupamadzi Open Centre','Open Centre School','PENDING','PENDING','Inactive'],
+    ['Kalonje','Mutumba Community School','Community School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Mwila Chilembwe Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Mwendachabe Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Chipelembe Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Kapilya Open Centre','Open Centre School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Mwelushi Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Muwele Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Milomfi Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['Mwelushi','Chibali Primary','Primary School','PENDING','PENDING','Inactive'],
+  ];
+
+  // Clear old data rows (keep header)
+  if (tab1.getLastRow() > 1) {
+    tab1.getRange(2, 1, tab1.getLastRow() - 1, 6).clearContent().clearFormat();
+  }
+
+  // Force phone column as plain text to preserve leading zeros
+  tab1.getRange(2, 5, schoolRows.length, 1).setNumberFormat('@');
+  tab1.getRange(2, 1, schoolRows.length, 6).setValues(schoolRows);
+
+  // Reapply header formatting
+  tab1.getRange(1, 1, 1, 6).setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
+
+  // Row colours
+  for (var i = 0; i < schoolRows.length; i++) {
+    tab1.getRange(i + 2, 1, 1, 6)
+      .setBackground(schoolRows[i][5] === 'Active' ? '#d9ead3' : '#fce8e6');
+  }
+
+  tab1.setFrozenRows(1);
+  tab1.autoResizeColumns(1, 6);
+
+  Logger.log('School data reloaded — ' + schoolRows.length + ' rows written.');
+  Logger.log('Sheet URL: ' + ss.getUrl());
 }
 
 // ── Internal helpers ──────────────────────────────────────────
