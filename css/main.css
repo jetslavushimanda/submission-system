@@ -511,17 +511,48 @@ body {
   margin: 0;
 }
 
-.google-btn-wrap {
-  min-height: 44px;
+.phone-input-wrap {
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.signin-gsi-loading {
-  font-size: 14px;
-  color: var(--text-muted);
-  font-style: italic;
+.phone-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.phone-input:focus {
+  border-color: var(--green);
+}
+
+.phone-error {
+  font-size: 13px;
+  color: #c0392b;
+  margin: 0;
+  min-height: 18px;
+}
+
+.btn-phone-submit {
+  width: 100%;
+  padding: 13px;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-phone-submit:active {
+  background: var(--green-dark, #145228);
 }
 
 .btn-signin-cancel {

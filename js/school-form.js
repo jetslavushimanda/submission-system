@@ -40,7 +40,7 @@ const SchoolForm = (() => {
          onerror="this.classList.add('logo-missing')">
   </div>
   <div class="sf-signedin-bar">
-    Signed in as: &nbsp;<strong>${App.maskGmail(_auth.gmail)}</strong>
+    Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong>
   </div>
 </header>
 
@@ -404,7 +404,6 @@ const SchoolForm = (() => {
   function collectData() {
     const base = {
       formType:      'school',
-      gmail:         _auth.gmail,
       zone:          _auth.zone,
       schoolName:    _auth.schoolName,
       schoolType:    _auth.schoolType,
@@ -449,7 +448,7 @@ const SchoolForm = (() => {
     try {
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'getCount', gmail: _auth.gmail, schoolName: _auth.schoolName }),
+        body: JSON.stringify({ action: 'getCount', phone: _auth.phone, schoolName: _auth.schoolName }),
       });
       const data = await res.json();
       if (typeof data.count === 'number') updateSlot(data.count);

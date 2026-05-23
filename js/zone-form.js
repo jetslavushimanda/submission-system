@@ -42,7 +42,7 @@ const ZoneForm = (() => {
          onerror="this.classList.add('logo-missing')">
   </div>
   <div class="sf-signedin-bar">
-    Signed in as: &nbsp;<strong>${App.maskGmail(_auth.gmail)}</strong>
+    Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong>
   </div>
 </header>
 
@@ -432,7 +432,7 @@ const ZoneForm = (() => {
   function collectData() {
     const base = {
       formType:        'zone',
-      gmail:           _auth.gmail,
+      phone:           _auth.phone,
       zone:            _auth.zone,
       coordinatorName: _auth.organiserName,
       phone:           _auth.phone,

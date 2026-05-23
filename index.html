@@ -11,15 +11,6 @@
   <link rel="stylesheet" href="css/school.css" />
   <link rel="stylesheet" href="css/zone.css" />
 
-  <!-- Google Identity Services (Sign-In) -->
-  <!-- onGoogleLibraryLoad fires as soon as the GSI script is ready -->
-  <script>
-    window.onGoogleLibraryLoad = function () {
-      if (window.App) App.initGSI();
-      else window._gsiPending = true;
-    };
-  </script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -97,13 +88,15 @@
 
       <div id="signin-mode-badge" class="signin-mode-badge"></div>
 
-      <h2 class="signin-title" id="signin-title">Sign In to Continue</h2>
-      <p class="signin-desc">Use your registered Gmail account to access the submission form.</p>
+      <h2 class="signin-title" id="signin-title">Enter Your Phone Number</h2>
+      <p class="signin-desc">Use your registered phone number to access the submission form.</p>
 
-      <!-- Google Sign-In button rendered here by GSI -->
-      <div id="google-signin-btn" class="google-btn-wrap"></div>
-
-      <p id="signin-gsi-loading" class="signin-gsi-loading hidden">Loading Google Sign-In...</p>
+      <div class="phone-input-wrap">
+        <input type="tel" id="phone-input" class="phone-input"
+               placeholder="e.g. 0971234567" maxlength="15" autocomplete="tel" />
+        <p id="phone-error" class="phone-error"></p>
+        <button class="btn-phone-submit" id="btn-phone-submit">Continue &rarr;</button>
+      </div>
 
       <button class="btn-signin-cancel" id="btn-signin-cancel">Cancel</button>
 
