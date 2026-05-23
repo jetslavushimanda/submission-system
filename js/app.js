@@ -145,6 +145,9 @@ function buildAuthErrorHTML(phone, message, isNetworkError) {
         ${isNetworkError
           ? `<button class="btn-auth-action btn-retry" onclick="App.retryCheck()">Try Again</button>`
           : ''}
+        <button class="btn-auth-action btn-retry" onclick="App.tryDifferentNumber()">
+          Try a Different Number
+        </button>
         <button class="btn-auth-action btn-back-home" onclick="App.backToLanding()">
           Back to Home
         </button>
@@ -172,6 +175,13 @@ function retryCheck() {
   if (authData && authData.phone) checkRegistration(authData.phone);
 }
 
+function tryDifferentNumber() {
+  sessionStorage.removeItem(SESSION_KEY);
+  authData = null;
+  showPage('page-landing');
+  showSignInOverlay(currentMode);
+}
+
 function signOut() {
   sessionStorage.removeItem(SESSION_KEY);
   authData = null;
@@ -191,6 +201,7 @@ const App = {
   submitPhone,
   backToLanding,
   retryCheck,
+  tryDifferentNumber,
   signOut,
   maskPhone,
   maskGmail: maskPhone,
