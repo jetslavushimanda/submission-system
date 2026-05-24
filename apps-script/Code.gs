@@ -103,8 +103,10 @@ function doPost(e) {
       }
 
     } else if (action === "getCount") {
-      // Inline: count Tab 2 rows for the requesting school
       result = getSchoolCount(payload);
+
+    } else if (action === "getZoneCount") {
+      result = getZoneCount(payload);
 
     } else {
       result = { status: "error", message: "Unknown action: " + action };
@@ -137,6 +139,27 @@ function getSchoolCount(payload) {
   var count = 0;
   for (var i = 0; i < names.length; i++) {
     if (trim_(names[i][0]) === schoolName) count++;
+  }
+  return { count: count };
+}
+
+// ── getZoneCount ──────────────────────────────────────────────
+// Called by zone-form.js to show the zone slot-usage progress bar.
+// Counts all rows in Tab 3 whose Zone (col C) matches.
+function getZoneCount(payload) {
+  var zoneName = trim_(payload.zone);
+  if (!zoneName) return { count: 0 };
+
+  var sheet = openSheet_(TAB_ZONE_SUB);
+  if (!sheet) return { count: 0 };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { count: 0 };
+
+  var zones = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
+  var count = 0;
+  for (var i = 0; i < zones.length; i++) {
+    if (trim_(zones[i][0]) === zoneName) count++;
   }
   return { count: count };
 }

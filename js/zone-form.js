@@ -4,6 +4,7 @@
 const ZoneForm = (() => {
 
   let _pageId, _auth, _activeTab;
+  const ZONE_SLOT_TOTAL = 64;
 
   // ── Entry Point ───────────────────────────────────────────────
   function render(pageId, auth) {
@@ -14,6 +15,7 @@ const ZoneForm = (() => {
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
     buildPtypeRadios([]);
+    loadSlotCount();
   }
 
   // ── Full Page HTML ────────────────────────────────────────────
@@ -56,10 +58,22 @@ const ZoneForm = (() => {
     <p class="sf-wrong-details">Wrong details? Contact the District JETS Organiser.</p>
   </div>
 
+  <div class="form-card">
+    <div class="sf-slot-row">
+      <span class="sf-slot-label">Zone slots used</span>
+      <span id="sf-slot-display" class="sf-slot-display">Loading&hellip;</span>
+    </div>
+    <div class="sf-slot-track">
+      <div id="sf-slot-fill" class="sf-slot-fill" style="width:0%"></div>
+    </div>
+    <p class="sf-slot-note">Total: <strong>${ZONE_SLOT_TOTAL}</strong> &mdash; ${_auth.zone} Zone</p>
+  </div>
+
   <div class="sf-tab-bar" id="sf-tab-bar">
     <button class="sf-tab-btn active" data-tab="learner">LEARNER</button>
     <button class="sf-tab-btn" data-tab="teacher">TEACHER</button>
     <button class="sf-tab-btn" data-tab="youth">YOUTH</button>
+    <button class="sf-tab-btn" data-tab="skills">SKILLS</button>
   </div>
 
   <!-- ── LEARNER TAB ── -->
@@ -218,6 +232,72 @@ const ZoneForm = (() => {
     </div>
   </div>
 
+  <!-- ── TECHNICAL SKILLS TAB ── -->
+  <div id="tab-skills" class="sf-tab-panel hidden">
+    <div class="form-card">
+      <div class="card-title">Technical Skills Participant</div>
+      <div class="field">
+        <label for="sk-school">School Participant is Coming From <span class="req">*</span></label>
+        <select id="sk-school">
+          <option value="">&#8212; Select School &#8212;</option>
+          ${schoolOpts}
+        </select>
+      </div>
+      <div class="field">
+        <label for="sk-name">Full Name <span class="req">*</span></label>
+        <input type="text" id="sk-name" placeholder="Full name of learner">
+      </div>
+      <div class="field">
+        <label for="sk-age">Age <span class="req">*</span></label>
+        <input type="number" id="sk-age" min="10" max="25" placeholder="Age">
+      </div>
+      <div class="field">
+        <label>Sex <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="sk-sex" value="Male"> Male</label>
+          <label class="radio-opt"><input type="radio" name="sk-sex" value="Female"> Female</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="sk-level">Level <span class="req">*</span></label>
+        <select id="sk-level" disabled>
+          <option value="">&#8212; Select School First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sk-grade">Grade / Form <span class="req">*</span></label>
+        <select id="sk-grade" disabled>
+          <option value="">&#8212; Select Level First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sk-cat">Skill Category <span class="req">*</span></label>
+        <select id="sk-cat" disabled>
+          <option value="">&#8212; Select School First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sk-subskill">Sub-Skill <span class="req">*</span></label>
+        <select id="sk-subskill" disabled>
+          <option value="">&#8212; Select Category First &#8212;</option>
+        </select>
+      </div>
+      <div class="field hidden" id="sk-title-field">
+        <label for="sk-title">Title of Innovation <span class="req">*</span></label>
+        <input type="text" id="sk-title" placeholder="Enter title of innovation">
+      </div>
+      <div class="field hidden" id="sk-report-field">
+        <label for="sk-report">Innovation Report <span class="req">*</span></label>
+        <input type="file" id="sk-report" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
+        <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
+      </div>
+      <div class="field">
+        <label for="sk-teacher">Supervising Teacher <span class="req">*</span></label>
+        <input type="text" id="sk-teacher" placeholder="Full name of supervising teacher">
+      </div>
+    </div>
+  </div>
+
   <!-- ── DECLARATION ── -->
   <div class="form-card">
     <div class="card-title">Declaration</div>
@@ -255,17 +335,20 @@ const ZoneForm = (() => {
       else if (e.target.id === 'l-level')   onLevelChange();
       else if (e.target.name === 'l-ptype') onPtypeChange();
       else if (e.target.id === 'l-cat')     onCategoryChange();
+      else if (e.target.id === 'sk-school') onSkillSchoolChange();
+      else if (e.target.id === 'sk-level')  onSkillLevelChange();
+      else if (e.target.id === 'sk-cat')    onSkillCatChange();
       validateForm();
     });
     page.addEventListener('input', () => validateForm());
   }
 
-  // ── Tab Switching ─────────────────────────────────────────────
+  // ── Tab Switching ──────────────────────���──────────────────────
   function switchTab(tab) {
     _activeTab = tab;
     document.querySelectorAll('.sf-tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === tab));
-    ['learner', 'teacher', 'youth'].forEach(t =>
+    ['learner', 'teacher', 'youth', 'skills'].forEach(t =>
       document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab));
     validateForm();
     window.scrollTo(0, 0);
@@ -356,7 +439,16 @@ const ZoneForm = (() => {
     if (_activeTab === 'learner') return learnerValid();
     if (_activeTab === 'teacher') return teacherValid();
     if (_activeTab === 'youth')   return youthValid();
+    if (_activeTab === 'skills')  return skillsValid();
     return false;
+  }
+
+  function skillsValid() {
+    return v('sk-school') && filled('sk-name') && filled('sk-age') && rval('sk-sex') &&
+           v('sk-level') && v('sk-grade') && v('sk-cat') && v('sk-subskill') &&
+           (!vis('sk-title-field')  || filled('sk-title')) &&
+           (!vis('sk-report-field') || hasFile('sk-report')) &&
+           filled('sk-teacher');
   }
 
   function learnerValid() {
@@ -425,6 +517,7 @@ const ZoneForm = (() => {
         <a class="btn-whatsapp" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">&#128172; Send Confirmation via WhatsApp</a>
         <button class="btn-add-another" id="sf-add-btn">+ ADD ANOTHER PARTICIPANT</button>`;
       document.getElementById('sf-add-btn').addEventListener('click', () => render(_pageId, _auth));
+      loadSlotCount();
 
     } catch (err) {
       msg.innerHTML = `
@@ -474,7 +567,7 @@ const ZoneForm = (() => {
       category:          v('t-cat'),
       titleOfInnovation: v('t-title'),
     };
-    return { ...base,
+    if (_activeTab === 'youth') return { ...base,
       participantType:   'Out-of-School Youth',
       participantSchool: v('y-school'),
       schoolType:        schoolTypeFor(v('y-school')),
@@ -484,6 +577,21 @@ const ZoneForm = (() => {
       category:          v('y-cat'),
       titleOfInnovation: v('y-title'),
       mentor:            v('y-mentor'),
+    };
+    return { ...base,
+      participantType:    'Learner',
+      learnerSubType:     'Technical Skills',
+      participantSchool:  v('sk-school'),
+      schoolType:         schoolTypeFor(v('sk-school')),
+      fullName:           v('sk-name'),
+      age:                v('sk-age'),
+      sex:                rval('sk-sex'),
+      gradeForm:          v('sk-grade'),
+      level:              v('sk-level'),
+      category:           v('sk-cat'),
+      subSkill:           v('sk-subskill'),
+      titleOfInnovation:  v('sk-title'),
+      supervisingTeacher: v('sk-teacher'),
     };
   }
 
@@ -509,12 +617,63 @@ const ZoneForm = (() => {
     return s ? s.type : '';
   }
 
-  function ptypesFor(level) {
-    const base = ['Learner Innovation', 'Academics / Quiz & Olympiads'];
-    if (level === 'Junior Secondary (Form 1-2)' || level === 'Senior Secondary (Grade 10-12)') {
-      base.push('Technical Skills');
+  function onSkillSchoolChange() {
+    const school = v('sk-school');
+    const type   = schoolTypeFor(school);
+    const levels = (LEVELS_BY_SCHOOL_TYPE[type] || [])
+      .filter(l => l === 'Junior Secondary (Form 1-2)' || l === 'Senior Secondary (Grade 10-12)');
+    const lSel = document.getElementById('sk-level');
+    const gSel = document.getElementById('sk-grade');
+    const cSel = document.getElementById('sk-cat');
+    const sSel = document.getElementById('sk-subskill');
+
+    if (levels.length) {
+      lSel.innerHTML = '<option value="">&#8212; Select Level &#8212;</option>' +
+        levels.map(l => `<option value="${l}">${l}</option>`).join('');
+      lSel.disabled = false;
+      cSel.innerHTML = '<option value="">&#8212; Select Skill Category &#8212;</option>' +
+        Object.keys(SKILLS).map(c => `<option value="${c}">${c}</option>`).join('');
+      cSel.disabled = false;
+    } else {
+      lSel.innerHTML = '<option value="">&#8212; Technical Skills N/A for this school &#8212;</option>';
+      lSel.disabled = true;
+      cSel.innerHTML = '<option value="">&#8212; Select School First &#8212;</option>';
+      cSel.disabled = true;
     }
-    return base;
+    gSel.innerHTML = '<option value="">&#8212; Select Level First &#8212;</option>';
+    gSel.disabled = true;
+    sSel.innerHTML = '<option value="">&#8212; Select Category First &#8212;</option>';
+    sSel.disabled = true;
+    hide('sk-title-field'); hide('sk-report-field');
+  }
+
+  function onSkillLevelChange() {
+    const level  = v('sk-level');
+    const grades = GRADES_BY_LEVEL[level] || [];
+    const gSel   = document.getElementById('sk-grade');
+    if (gSel) {
+      gSel.innerHTML = '<option value="">&#8212; Select Grade / Form &#8212;</option>' +
+        grades.map(g => `<option value="${g}">${g}</option>`).join('');
+      gSel.disabled = !grades.length;
+    }
+  }
+
+  function onSkillCatChange() {
+    const cat  = v('sk-cat');
+    const subs = (SKILLS[cat] && SKILLS[cat].subSkills) ? SKILLS[cat].subSkills : [];
+    const sSel = document.getElementById('sk-subskill');
+    if (sSel) {
+      sSel.innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>' +
+        subs.map(s => `<option value="${s}">${s}</option>`).join('');
+      sSel.disabled = !subs.length;
+    }
+    const cosm = cat === 'Cosmetology';
+    cosm ? show('sk-title-field') : hide('sk-title-field');
+    cosm ? show('sk-report-field') : hide('sk-report-field');
+  }
+
+  function ptypesFor(level) {
+    return ['Learner Innovation', 'Academics / Quiz & Olympiads'];
   }
 
   function catsFor(ptype, level) {
@@ -528,7 +687,35 @@ const ZoneForm = (() => {
     if (_activeTab === 'learner' && vis('l-report-field')) return document.getElementById('l-report');
     if (_activeTab === 'teacher') return document.getElementById('t-report');
     if (_activeTab === 'youth')   return document.getElementById('y-report');
+    if (_activeTab === 'skills'  && vis('sk-report-field')) return document.getElementById('sk-report');
     return null;
+  }
+
+  // ── Slot Counter ──────────────────────────────────────────────
+  async function loadSlotCount() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getZoneCount', zone: _auth.zone }),
+      });
+      const data = await res.json();
+      if (typeof data.count === 'number') updateSlot(data.count);
+    } catch (_) {
+      const el = document.getElementById('sf-slot-display');
+      if (el) el.textContent = '&#8212; of ' + ZONE_SLOT_TOTAL;
+    }
+  }
+
+  function updateSlot(n) {
+    const pct  = Math.min(100, Math.round((n / ZONE_SLOT_TOTAL) * 100));
+    const disp = document.getElementById('sf-slot-display');
+    const fill = document.getElementById('sf-slot-fill');
+    if (disp) disp.textContent = n + ' of ' + ZONE_SLOT_TOTAL;
+    if (fill) {
+      fill.style.width = pct + '%';
+      fill.classList.toggle('sf-slot-warn', pct >= 80 && pct < 100);
+      fill.classList.toggle('sf-slot-full', pct >= 100);
+    }
   }
 
   function toBase64(file) {
