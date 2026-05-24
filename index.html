@@ -15,6 +15,10 @@
 </head>
 <body>
 
+  <!-- Network status: dot (top-right) + banner (top edge) -->
+  <div id="net-dot" class="net-dot net-online" aria-label="Network status"></div>
+  <div id="net-banner" class="net-banner hidden"></div>
+
   <!-- ═══════════════════════════ LANDING PAGE ═══════════════════════════ -->
   <div id="page-landing" class="page active">
 
@@ -51,6 +55,9 @@
 
     <main class="landing-main">
 
+      <!-- Deadline countdowns — always visible -->
+      <div id="deadline-countdowns" class="deadline-countdowns"></div>
+
       <!-- Phone verification -->
       <div class="landing-verify-section">
         <p class="select-prompt">Enter your registered phone number to continue:</p>
@@ -62,16 +69,21 @@
         <div id="landing-auth-msg"></div>
       </div>
 
+      <!-- Welcome statistics — shown after login for School/Zone roles -->
+      <div id="welcome-stats-container" class="hidden"></div>
+
       <!-- Form buttons — enabled/disabled/hidden based on role after verification -->
       <button class="btn-submit btn-school-submit btn-disabled" id="btn-open-school" disabled>
         <span class="btn-title">SCHOOL SUBMISSION</span>
         <span class="btn-role">School JETS Organiser</span>
       </button>
+      <div id="school-deadline-msg" class="deadline-msg"></div>
 
       <button class="btn-submit btn-zone-submit btn-disabled" id="btn-open-zone" disabled>
         <span class="btn-title">ZONE SUBMISSION</span>
         <span class="btn-role">Zonal JETS Coordinator</span>
       </button>
+      <div id="zone-deadline-msg" class="deadline-msg"></div>
 
       <button class="btn-submit btn-dashboard-submit hidden" id="btn-open-dashboard" disabled>
         <span class="btn-title">&#128202; DISTRICT DASHBOARD</span>
@@ -109,6 +121,8 @@
   <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════════ -->
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/welcome-stats.js"></script>
+  <script src="js/history.js"></script>
   <script src="js/school-form.js"></script>
   <script src="js/zone-form.js"></script>
   <script src="js/dashboard.js"></script>

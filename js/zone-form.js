@@ -4,7 +4,9 @@
 const ZoneForm = (() => {
 
   let _pageId, _auth, _activeMain, _activeSub, _schoolFieldEl;
+  let _draftTimer, _restoring = false, _draftListenersAdded = false;
   const ZONE_SLOT_TOTAL = 64;
+  const DRAFT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
   const SKILL_SLUGS = {
     'Civil Engineering':     'civil',
@@ -26,6 +28,8 @@ const ZoneForm = (() => {
     bindEvents();
     moveSchoolField();
     loadSlotCount();
+    startAutoSave();
+    checkAndShowDraft();
   }
 
   function effectiveTab() {
@@ -80,6 +84,12 @@ const ZoneForm = (() => {
     </div>
     <p class="sf-slot-note">Total: <strong>${ZONE_SLOT_TOTAL}</strong> &mdash; ${_auth.zone} Zone</p>
   </div>
+
+  <!-- ── VIEW MY SUBMISSIONS ── -->
+  <button class="btn-view-history"
+          onclick="SubmissionHistory.show('page-zone', App.authData, 'zone', ${ZONE_SLOT_TOTAL})">
+    &#128203; VIEW MY SUBMISSIONS
+  </button>
 
   <!-- ── MAIN TAB BAR ── -->
   <div class="sf-tab-bar" id="sf-main-tab-bar">
@@ -370,6 +380,7 @@ const ZoneForm = (() => {
   <div class="sf-actions">
     <button id="sf-submit" class="btn-form-submit" disabled>SUBMIT PARTICIPANT</button>
     <div id="sf-msg"></div>
+    <div id="sf-draft-indicator" class="draft-indicator"></div>
   </div>
 
 </div>`;
@@ -407,6 +418,8 @@ const ZoneForm = (() => {
 
   // ── Events ────────────────────────────────────────────────────
   function bindEvents() {
+    window._sfValidate = validateForm;
+
     document.getElementById('sf-main-tab-bar').addEventListener('click', e => {
       const btn = e.target.closest('.sf-tab-btn');
       if (btn) switchMainTab(btn.dataset.tab);
@@ -434,6 +447,7 @@ const ZoneForm = (() => {
 
   // ── Tab Switching ─────────────────────────────────────────────
   function switchMainTab(tab) {
+    saveDraft();
     _activeMain = tab;
     document.querySelectorAll('#sf-main-tab-bar .sf-tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === tab));
@@ -446,6 +460,7 @@ const ZoneForm = (() => {
   }
 
   function switchSubTab(subtab) {
+    saveDraft();
     _activeSub = subtab;
     document.querySelectorAll('#sf-sub-tab-bar .sf-sub-tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.subtab === subtab));
@@ -599,7 +614,7 @@ const ZoneForm = (() => {
   // ── Validation ────────────────────────────────────────────────
   function validateForm() {
     const btn = document.getElementById('sf-submit');
-    if (btn) btn.disabled = !isValid();
+    if (btn) btn.disabled = !isValid() || (window.NetStatus && window.NetStatus.isOffline);
   }
 
   function isValid() {
@@ -692,8 +707,10 @@ const ZoneForm = (() => {
         <a class="btn-whatsapp" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">&#128172; Send Confirmation via WhatsApp</a>
         <button class="btn-add-another" id="sf-add-btn">+ ADD ANOTHER PARTICIPANT</button>`;
       document.getElementById('sf-add-btn').addEventListener('click', () => render(_pageId, _auth));
+      clearDraft();
       loadSlotCount();
       if (effectiveTab() === 'skills') loadSkillCounts();
+      if (typeof WelcomeStats !== 'undefined') WelcomeStats.refresh();
 
     } catch (err) {
       msg.innerHTML = `
@@ -849,6 +866,166 @@ const ZoneForm = (() => {
     });
     const totalEl = document.getElementById('sk-used-total');
     if (totalEl) totalEl.textContent = totalUsed;
+  }
+
+  // ── Draft Auto-Save ───────────────────────────────────────────
+  function draftKey() { return 'jets_draft_zone_' + _auth.phone; }
+
+  function collectDraftData() {
+    const fields = {};
+    [
+      'zf-school',
+      'l-name','l-age','l-level','l-grade','l-cat','l-title','l-teacher',
+      't-name','t-cat','t-title',
+      'y-name','y-age','y-cat','y-title','y-mentor',
+      'ac-name','ac-age','ac-level','ac-grade','ac-cat','ac-teacher',
+      'sk-name','sk-age','sk-level','sk-grade','sk-cat','sk-subskill','sk-title','sk-teacher',
+    ].forEach(id => { const el = document.getElementById(id); if (el) fields[id] = el.value; });
+    ['l-sex','t-sex','y-sex','ac-sex','sk-sex'].forEach(nm => {
+      const el = document.querySelector(`input[name="${nm}"]:checked`);
+      if (el) fields[nm] = el.value;
+    });
+    const decl = document.getElementById('sf-decl');
+    if (decl) fields['sf-decl'] = decl.checked;
+    const fileNames = {};
+    ['l-report','t-report','y-report','sk-report'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.files && el.files.length > 0) fileNames[id] = el.files[0].name;
+    });
+    return { savedAt: new Date().toISOString(), activeMain: _activeMain, activeSub: _activeSub, fields, fileNames };
+  }
+
+  function saveDraft() {
+    if (_restoring || !document.getElementById('sf-submit')) return;
+    try { localStorage.setItem(draftKey(), JSON.stringify(collectDraftData())); updateDraftIndicator(); } catch (_) {}
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    const ind = document.getElementById('sf-draft-indicator');
+    if (ind) ind.textContent = '';
+  }
+
+  function loadDraftData() {
+    try {
+      const raw = localStorage.getItem(draftKey());
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft || !draft.savedAt) return null;
+      if (Date.now() - new Date(draft.savedAt).getTime() > DRAFT_EXPIRY_MS) { clearDraft(); return null; }
+      return draft;
+    } catch (_) { return null; }
+  }
+
+  function fmtSavedTime(iso) {
+    const d = new Date(iso);
+    const h = d.getHours(), mi = d.getMinutes(), ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${String(mi).padStart(2, '0')} ${ampm}`;
+  }
+
+  function updateDraftIndicator() {
+    const ind = document.getElementById('sf-draft-indicator');
+    if (!ind) return;
+    try {
+      const raw = localStorage.getItem(draftKey());
+      if (!raw) { ind.textContent = ''; return; }
+      ind.textContent = 'Draft saved at ' + fmtSavedTime(JSON.parse(raw).savedAt);
+    } catch (_) {}
+  }
+
+  function showDraftBanner(draft) {
+    const body = document.querySelector('#' + _pageId + ' .sf-body');
+    if (!body) return;
+    const banner = document.createElement('div');
+    banner.id = 'sf-draft-banner';
+    banner.className = 'draft-banner';
+    banner.innerHTML = `
+      <div class="draft-banner-top">
+        <span class="draft-banner-msg">&#128203; Draft restored from ${fmtSavedTime(draft.savedAt)}.</span>
+      </div>
+      <div class="draft-banner-btns">
+        <button class="draft-btn-continue" id="sf-draft-continue">CONTINUE DRAFT</button>
+        <button class="draft-btn-fresh" id="sf-draft-fresh">START FRESH</button>
+      </div>`;
+    body.insertBefore(banner, body.firstChild);
+    document.getElementById('sf-draft-continue').addEventListener('click', () => {
+      restoreDraft(draft);
+      banner.remove();
+      const msg = document.getElementById('sf-msg');
+      if (msg) msg.innerHTML = '<div class="alert alert-info">Draft loaded. Please re-select your report file.</div>';
+    });
+    document.getElementById('sf-draft-fresh').addEventListener('click', () => {
+      clearDraft();
+      banner.remove();
+    });
+  }
+
+  function restoreDraft(draft) {
+    _restoring = true;
+    const f = draft.fields || {}, fn = draft.fileNames || {};
+    if (draft.activeMain) switchMainTab(draft.activeMain);
+    if (draft.activeSub)  switchSubTab(draft.activeSub);
+
+    const setVal = (id, val) => { if (val === undefined) return; const el = document.getElementById(id); if (el) el.value = val; };
+    const setRadio = (name, val) => { if (!val) return; const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if (el) el.checked = true; };
+
+    // Restore school first — cascades levels into all panels
+    if (f['zf-school']) { setVal('zf-school', f['zf-school']); onSchoolChange(); }
+
+    ['l-name','l-age','l-teacher','t-name','t-title','y-name','y-age','y-mentor','y-title',
+     'ac-name','ac-age','ac-teacher','sk-name','sk-age','sk-teacher','sk-title',
+    ].forEach(id => setVal(id, f[id]));
+    ['l-sex','t-sex','y-sex','ac-sex','sk-sex'].forEach(nm => setRadio(nm, f[nm]));
+    setVal('t-cat', f['t-cat']);
+    setVal('y-cat', f['y-cat']);
+
+    if (f['l-level'])    { setVal('l-level', f['l-level']); onLevelChange(); }
+    if (f['l-grade'])    setVal('l-grade', f['l-grade']);
+    if (f['l-cat'])      { setVal('l-cat', f['l-cat']); onInnovCatChange(); }
+    setVal('l-title', f['l-title']);
+
+    if (f['ac-level'])   { setVal('ac-level', f['ac-level']); onAcadLevelChange(); }
+    if (f['ac-grade'])   setVal('ac-grade', f['ac-grade']);
+    if (f['ac-cat'])     setVal('ac-cat', f['ac-cat']);
+
+    if (f['sk-level'])   { setVal('sk-level', f['sk-level']); onSkillLevelChange(); }
+    if (f['sk-grade'])   setVal('sk-grade', f['sk-grade']);
+    if (f['sk-cat'])     { setVal('sk-cat', f['sk-cat']); onSkillCatChange(); }
+    if (f['sk-subskill']) setVal('sk-subskill', f['sk-subskill']);
+
+    const decl = document.getElementById('sf-decl');
+    if (decl && f['sf-decl'] !== undefined) decl.checked = f['sf-decl'];
+
+    ['l-report','t-report','y-report','sk-report'].forEach(id => {
+      if (!fn[id]) return;
+      const el = document.getElementById(id);
+      if (el && !el.parentNode.querySelector('.draft-file-note')) {
+        const note = document.createElement('span');
+        note.className = 'draft-file-note';
+        note.textContent = 'Previously: ' + fn[id];
+        el.parentNode.insertBefore(note, el.nextSibling);
+      }
+    });
+
+    _restoring = false;
+    validateForm();
+    updateDraftIndicator();
+  }
+
+  function startAutoSave() {
+    if (_draftTimer) clearInterval(_draftTimer);
+    _draftTimer = setInterval(saveDraft, 30000);
+    if (!_draftListenersAdded) {
+      document.addEventListener('visibilitychange', saveDraft);
+      window.addEventListener('blur', saveDraft);
+      _draftListenersAdded = true;
+    }
+  }
+
+  function checkAndShowDraft() {
+    const draft = loadDraftData();
+    if (draft) showDraftBanner(draft);
+    updateDraftIndicator();
   }
 
   // ── DOM Helpers ───────────────────────────────────────────────

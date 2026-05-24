@@ -543,6 +543,22 @@ function getFullDashboard_() {
     skills.push({ category: c, used: skillCounts[c], slots: SKILL_SLOTS[c] });
   }
 
+  // ── All school records for Admin Panel ────────────────────
+  var allSchoolRecords = [];
+  for (var ari = 0; ari < reg.length; ari++) {
+    var arRole = (reg[ari][5] || '').toString().trim();
+    if (arRole === 'District') continue;
+    allSchoolRecords.push({
+      zone:      (reg[ari][0] || '').toString().trim(),
+      name:      (reg[ari][1] || '').toString().trim(),
+      type:      (reg[ari][2] || '').toString().trim(),
+      organiser: (reg[ari][3] || '').toString().trim(),
+      phone:     (reg[ari][4] || '').toString().trim(),
+      role:      arRole,
+      status:    (reg[ari][6] || 'Active').toString().trim(),
+    });
+  }
+
   // ── Export / Drive URLs ────────────────────────────────────
   var driveUrl  = DRIVE_FOLDER_ID ? 'https://drive.google.com/drive/folders/' + DRIVE_FOLDER_ID : '';
   var exportUrl = SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx' : '';
@@ -552,6 +568,13 @@ function getFullDashboard_() {
     ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx&gid=' + exportS2Gid : exportUrl;
   var exportZoneUrl   = SHEET_ID && exportS3Gid !== ''
     ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx&gid=' + exportS3Gid : exportUrl;
+
+  // ── Correction Requests (Tab 5) ────────────────────────────
+  var corrections = [];
+  try {
+    var corrResult = getCorrectionRequests_();
+    corrections = corrResult.corrections || [];
+  } catch (_) {}
 
   return {
     status:   'ok',
@@ -563,13 +586,15 @@ function getFullDashboard_() {
       schoolsNotStarted: Math.max(0, schoolsTotal - schoolsSubmitted),
       todaySubmissions:  todayCount
     },
-    zones:      zones,
-    schoolList: schoolList,
-    recentFeed: allSubs.slice(0, 20),
-    allSubs:    allSubs,
-    coverage:   coverage,
-    skills:     skills,
-    driveUrl:   driveUrl,
+    zones:       zones,
+    schoolList:  schoolList,
+    recentFeed:  allSubs.slice(0, 20),
+    allSubs:     allSubs,
+    coverage:    coverage,
+    skills:      skills,
+    corrections:      corrections,
+    allSchoolRecords: allSchoolRecords,
+    driveUrl:    driveUrl,
     exportUrl:       exportUrl,
     exportSchoolUrl: exportSchoolUrl,
     exportZoneUrl:   exportZoneUrl

@@ -23,10 +23,11 @@ var SHEET_ID        = PropertiesService.getScriptProperties().getProperty('SHEET
 var DRIVE_FOLDER_ID = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID') || 'YOUR_DRIVE_FOLDER_ID_HERE';
 
 // Sheet tab names — must match the actual tab names exactly.
-const TAB_REGISTERED = "Registered Schools";  // Tab 1
-const TAB_SCHOOL_SUB = "School Submissions";  // Tab 2
-const TAB_ZONE_SUB   = "Zone Submissions";    // Tab 3
-const TAB_DASHBOARD  = "District Dashboard";  // Tab 4
+const TAB_REGISTERED  = "Registered Schools";   // Tab 1
+const TAB_SCHOOL_SUB  = "School Submissions";   // Tab 2
+const TAB_ZONE_SUB    = "Zone Submissions";     // Tab 3
+const TAB_DASHBOARD   = "District Dashboard";   // Tab 4
+const TAB_CORRECTIONS = "Correction Requests";  // Tab 5
 
 // ── doGet ─────────────────────────────────────────────────────
 // Health-check: paste the web app URL in a browser to confirm
@@ -131,6 +132,73 @@ function doPost(e) {
 
     } else if (action === "getZoneSkillCounts") {
       result = getZoneSkillCounts(payload);
+
+    } else if (action === "getWelcomeStats") {
+      result = getWelcomeStats_(payload);
+
+    } else if (action === "getSubmissionHistory") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        result = getSubmissionHistory_(payload.phone, payload.source);
+      }
+
+    } else if (action === "submitCorrectionRequest") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        result = submitCorrectionRequest(payload);
+      }
+
+    } else if (action === "getCorrectionRequests") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = getCorrectionRequests_();
+      }
+
+    } else if (action === "handleCorrectionDecision") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = handleCorrectionDecision_(payload.requestId, payload.decision, authCheck.organiserName);
+      }
+
+    } else if (action === "adminGetSchools") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminGetSchools_();
+      }
+
+    } else if (action === "adminUpdateSchool") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminUpdateSchool_(payload);
+      }
+
+    } else if (action === "adminAddSchool") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminAddSchool_(payload);
+      }
+
+    } else if (action === "adminToggleStatus") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminToggleStatus_(payload);
+      }
 
     } else {
       result = { status: "error", message: "Unknown action: " + action };
@@ -504,6 +572,19 @@ function setupSystem() {
   tab4.setFrozenRows(1);
   tab4.autoResizeColumns(1, 6);
 
+  // ── Step 5b: Tab 5 — Correction Requests ────────────────────
+  var tab5 = ss.insertSheet('Correction Requests');
+  var h5   = [
+    'Timestamp', 'Request ID', 'Reference Number', 'Coordinator Name', 'Phone',
+    'School/Zone', 'What to Correct', 'Correct Information', 'Status',
+    'Decided By', 'Decision Timestamp', 'Source', 'Participant Name'
+  ];
+  tab5.getRange(1, 1, 1, h5.length).setValues([h5]);
+  tab5.getRange(1, 1, 1, h5.length)
+    .setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
+  tab5.setFrozenRows(1);
+  tab5.autoResizeColumns(1, h5.length);
+
   // ── Step 6: Create Drive folder tree ────────────────────────
   Logger.log('Creating Drive folders...');
   var mainFolder   = DriveApp.createFolder('JETS Lavushimanda 2024-2026');
@@ -657,6 +738,141 @@ function getDashboardData_() {
     }
   }
   return { status: 'ok', rows: rows };
+}
+
+// ── getSubmissionHistory_ ─────────────────────────────────────
+// Returns all submissions for a given phone number from the
+// appropriate tab (school → Tab 2, zone → Tab 3).
+// Columns A-N (indices 0-13) are read; both tabs share the same
+// column layout up to N.
+function getSubmissionHistory_(phone, source) {
+  var normalizedPhone = (phone || '').toString().toLowerCase().trim();
+  if (!normalizedPhone) return { status: 'ok', rows: [] };
+
+  var rows = [];
+
+  if (source === 'school') {
+    var sheet2 = openSheet_(TAB_SCHOOL_SUB);
+    if (sheet2) {
+      var lastRow2 = sheet2.getLastRow();
+      if (lastRow2 >= 2) {
+        var data2 = sheet2.getRange(2, 1, lastRow2 - 1, 14).getValues();
+        for (var i = 0; i < data2.length; i++) {
+          // Col G (index 6) = Phone
+          var rowPhone = (data2[i][6] || '').toString().toLowerCase().trim();
+          if (rowPhone === normalizedPhone) {
+            var ts = data2[i][0];
+            rows.push({
+              refNumber: (data2[i][1] || '').toString(),
+              timestamp: ts ? new Date(ts).toISOString() : '',
+              fullName:  (data2[i][9]  || '').toString(),
+              pType:     (data2[i][7]  || '').toString(),
+              grade:     (data2[i][12] || '').toString(),
+              category:  (data2[i][13] || '').toString(),
+              status:    'Submitted',
+            });
+          }
+        }
+      }
+    }
+  } else if (source === 'zone') {
+    var sheet3 = openSheet_(TAB_ZONE_SUB);
+    if (sheet3) {
+      var lastRow3 = sheet3.getLastRow();
+      if (lastRow3 >= 2) {
+        var data3 = sheet3.getRange(2, 1, lastRow3 - 1, 14).getValues();
+        for (var j = 0; j < data3.length; j++) {
+          // Col E (index 4) = Phone
+          var rowPhone3 = (data3[j][4] || '').toString().toLowerCase().trim();
+          if (rowPhone3 === normalizedPhone) {
+            var ts3 = data3[j][0];
+            rows.push({
+              refNumber: (data3[j][1]  || '').toString(),
+              timestamp: ts3 ? new Date(ts3).toISOString() : '',
+              fullName:  (data3[j][9]  || '').toString(),
+              pType:     (data3[j][7]  || '').toString(),
+              grade:     (data3[j][12] || '').toString(),
+              category:  (data3[j][13] || '').toString(),
+              status:    'Submitted',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Sort newest first
+  rows.sort(function(a, b) {
+    return (b.timestamp > a.timestamp) ? 1 : (b.timestamp < a.timestamp) ? -1 : 0;
+  });
+
+  // Attach correction status from Tab 5 (graceful if tab doesn't exist yet)
+  var correctionMap = {};
+  try { correctionMap = getMyCorrections_(normalizedPhone); } catch (_) {}
+  for (var k = 0; k < rows.length; k++) {
+    var cr = correctionMap[rows[k].refNumber];
+    rows[k].correctionStatus    = cr ? cr.status    : null;
+    rows[k].correctionRequestId = cr ? cr.requestId : null;
+  }
+
+  return { status: 'ok', rows: rows };
+}
+
+// ── getWelcomeStats_ ──────────────────────────────────────────
+// Returns submission counts by type for the welcome screen.
+// School role → counts from Tab 2 filtered by phone.
+// Zone role   → counts from Tab 3 filtered by zone + unique school list.
+function getWelcomeStats_(payload) {
+  var auth = checkRegistration(payload.phone);
+  if (!auth.found) return { status: 'error', message: 'Unauthorized.' };
+
+  var role   = auth.role;
+  var result = { status: 'ok', role: role };
+
+  if (role === 'School' || role === 'District') {
+    var sheet2 = openSheet_(TAB_SCHOOL_SUB);
+    var inn = 0, acad = 0, skill = 0;
+    if (sheet2 && sheet2.getLastRow() >= 2) {
+      var phone  = trim_(auth.phone);
+      var data2  = sheet2.getRange(2, 1, sheet2.getLastRow() - 1, 8).getValues();
+      for (var i = 0; i < data2.length; i++) {
+        if (trim_(data2[i][6]) !== phone) continue;   // col G = phone
+        var pt = (data2[i][7] || '').toString();       // col H = participant type
+        if (pt.indexOf('Technical Skills') !== -1)                   skill++;
+        else if (pt.indexOf('Academics') !== -1 || pt.indexOf('Quiz') !== -1) acad++;
+        else                                                          inn++;
+      }
+    }
+    result.innovations = inn;
+    result.academics   = acad;
+    result.skills      = skill;
+    result.total       = inn + acad + skill;
+
+  } else if (role === 'Zone') {
+    var sheet3 = openSheet_(TAB_ZONE_SUB);
+    var zInn = 0, zAcad = 0, zSkill = 0;
+    var submittedMap = {};
+    if (sheet3 && sheet3.getLastRow() >= 2) {
+      var zoneName = trim_(auth.zone);
+      var data3    = sheet3.getRange(2, 1, sheet3.getLastRow() - 1, 8).getValues();
+      for (var j = 0; j < data3.length; j++) {
+        if (trim_(data3[j][2]) !== zoneName) continue;  // col C = zone
+        var school = (data3[j][5] || '').toString().trim();  // col F = participant school
+        if (school) submittedMap[school] = true;
+        var zpt = (data3[j][7] || '').toString();            // col H = participant type
+        if (zpt.indexOf('Technical Skills') !== -1)                        zSkill++;
+        else if (zpt.indexOf('Academics') !== -1 || zpt.indexOf('Quiz') !== -1) zAcad++;
+        else                                                                zInn++;
+      }
+    }
+    result.innovations      = zInn;
+    result.academics        = zAcad;
+    result.skills           = zSkill;
+    result.total            = zInn + zAcad + zSkill;
+    result.submittedSchools = Object.keys(submittedMap);
+  }
+
+  return result;
 }
 
 // ── Internal helpers ──────────────────────────────────────────

@@ -7,8 +7,62 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREF
 
 const SESSION_KEY = "jets_session";
 
+// ── Submission Deadlines ──────────────────────────────────────
+const SCHOOL_DEADLINE = "2026-05-30T23:59:00";
+const ZONE_OPEN       = "2026-06-01T00:00:00";
+const ZONE_DEADLINE   = "2026-06-05T23:59:00";
+
+function schoolClosed() { return new Date() > new Date(SCHOOL_DEADLINE); }
+function zoneNotOpen()  { return new Date() < new Date(ZONE_OPEN); }
+function zoneClosed()   { return new Date() > new Date(ZONE_DEADLINE); }
+
 let currentMode = null;
 let authData    = null;
+
+// ── Network Status ────────────────────────────────────────────
+window.NetStatus = (() => {
+  let _offline = !navigator.onLine;
+  let _timer   = null;
+
+  function dot()    { return document.getElementById('net-dot'); }
+  function banner() { return document.getElementById('net-banner'); }
+
+  function applyDot(isOffline) {
+    const d = dot();
+    if (d) d.className = 'net-dot ' + (isOffline ? 'net-offline' : 'net-online');
+  }
+
+  function update(isOffline) {
+    _offline = isOffline;
+    applyDot(isOffline);
+    clearTimeout(_timer);
+
+    const b = banner();
+    if (!b) return;
+
+    if (isOffline) {
+      b.className  = 'net-banner net-banner-offline';
+      b.textContent = '⚠️ You are offline. Do not submit until reconnected.';
+      const sub = document.getElementById('sf-submit');
+      if (sub) sub.disabled = true;
+    } else {
+      b.className  = 'net-banner net-banner-online';
+      b.textContent = '✅ Connected. You can submit now.';
+      if (typeof window._sfValidate === 'function') window._sfValidate();
+      _timer = setTimeout(() => b.classList.add('hidden'), 3000);
+    }
+  }
+
+  window.addEventListener('offline', () => update(true));
+  window.addEventListener('online',  () => update(false));
+
+  document.addEventListener('DOMContentLoaded', () => {
+    applyDot(_offline);
+    if (_offline) update(true);
+  });
+
+  return { get isOffline() { return _offline; } };
+})();
 
 // ── Boot ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,6 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') App.verifyPhone();
   });
 
+  updateCountdowns();
+  setInterval(updateCountdowns, 60000);
+
   // Restore session if available
   const stored = sessionStorage.getItem(SESSION_KEY);
   if (stored) {
@@ -27,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
       authData = JSON.parse(stored);
       if (authData && authData.phone && authData.role) {
         applyRoleUI(authData.role);
+        if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
       }
     } catch (_) {
       sessionStorage.removeItem(SESSION_KEY);
@@ -63,6 +121,7 @@ async function verifyPhone() {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
       applyRoleUI(data.role);
       msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
+      if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
 
     } else if (data.reason === 'inactive') {
       authData = null;
@@ -94,23 +153,25 @@ function applyRoleUI(role) {
   const dashBtn   = document.getElementById('btn-open-dashboard');
 
   if (role === 'District') {
+    // District always has full access regardless of deadlines
     enableBtn(schoolBtn);
     enableBtn(zoneBtn);
     dashBtn.classList.remove('hidden');
     enableBtn(dashBtn);
   } else if (role === 'School') {
-    enableBtn(schoolBtn);
+    schoolClosed() ? disableBtn(schoolBtn) : enableBtn(schoolBtn);
     disableBtn(zoneBtn);
     dashBtn.classList.add('hidden');
     disableBtn(dashBtn);
   } else if (role === 'Zone') {
     disableBtn(schoolBtn);
-    enableBtn(zoneBtn);
+    (zoneNotOpen() || zoneClosed()) ? disableBtn(zoneBtn) : enableBtn(zoneBtn);
     dashBtn.classList.add('hidden');
     disableBtn(dashBtn);
   } else {
     lockAllButtons();
   }
+  applyDeadlineMsgs(role);
 }
 
 function enableBtn(btn) {
@@ -131,6 +192,142 @@ function lockAllButtons() {
   disableBtn(zoneBtn);
   dashBtn.classList.add('hidden');
   disableBtn(dashBtn);
+}
+
+// ── Deadline UI ───────────────────────────────────────────────
+function applyDeadlineMsgs(role) {
+  const schoolMsg = document.getElementById('school-deadline-msg');
+  const zoneMsg   = document.getElementById('zone-deadline-msg');
+  if (!schoolMsg || !zoneMsg) return;
+
+  if (role === 'District') {
+    schoolMsg.innerHTML = '';
+    zoneMsg.innerHTML   = '';
+    return;
+  }
+
+  schoolMsg.innerHTML = schoolClosed()
+    ? `<div class="deadline-closed-notice">School submissions are now closed.<br>
+         Submission period was 26–30 May 2026.<br>
+         Contact Mwansa Gibson: 0973375828</div>`
+    : '';
+
+  if (zoneNotOpen()) {
+    zoneMsg.innerHTML = `<div class="deadline-warn-notice">Zone submissions open on<br>
+       1st June 2026. Check back then.</div>`;
+  } else if (zoneClosed()) {
+    zoneMsg.innerHTML = `<div class="deadline-closed-notice">Zone submissions are now closed.<br>
+       Submission period was 1–5 June 2026.<br>
+       Contact Mwansa Gibson: 0973375828</div>`;
+  } else {
+    zoneMsg.innerHTML = '';
+  }
+}
+
+function showDeadlineClosed(mode) {
+  const isSchool = mode === 'school';
+  const pageId   = isSchool ? 'page-school' : 'page-zone';
+  const label    = isSchool ? 'School Submission' : 'Zone Submission';
+  const period   = isSchool ? '26–30 May 2026'    : '1–5 June 2026';
+  const who      = isSchool ? 'School' : 'Zone';
+  showPage(pageId);
+  setPageHTML(pageId, `
+    <div class="form-topbar">
+      <button class="btn-back" onclick="App.backToLanding()">&#8592; Back</button>
+      <span class="topbar-title">${label}</span>
+    </div>
+    <div class="auth-status-wrap">
+      <div class="auth-status-card">
+        <div class="alert alert-error">
+          <strong>${who} submissions are now closed.</strong><br>
+          Submission period was ${period}.<br>
+          Contact Mwansa Gibson: 0973375828
+        </div>
+        <button class="btn-auth-action btn-back-home" onclick="App.backToLanding()">Back to Home</button>
+      </div>
+    </div>`);
+}
+
+function showDeadlineNotOpen() {
+  showPage('page-zone');
+  setPageHTML('page-zone', `
+    <div class="form-topbar">
+      <button class="btn-back" onclick="App.backToLanding()">&#8592; Back</button>
+      <span class="topbar-title">Zone Submission</span>
+    </div>
+    <div class="auth-status-wrap">
+      <div class="auth-status-card">
+        <div class="alert alert-info">
+          Zone submissions open on<br>1st June 2026. Check back then.
+        </div>
+        <button class="btn-auth-action btn-back-home" onclick="App.backToLanding()">Back to Home</button>
+      </div>
+    </div>`);
+}
+
+// ── Countdown Timers ──────────────────────────────────────────
+function updateCountdowns() {
+  const el = document.getElementById('deadline-countdowns');
+  if (!el) return;
+
+  const now        = new Date();
+  const schoolDl   = new Date(SCHOOL_DEADLINE);
+  const zoneOpenDt = new Date(ZONE_OPEN);
+  const zoneDl     = new Date(ZONE_DEADLINE);
+
+  let schoolCard;
+  if (now > schoolDl) {
+    schoolCard = `
+      <div class="deadline-card">
+        <div class="deadline-card-label">School Submissions</div>
+        <span class="deadline-badge-closed">CLOSED</span>
+        <div class="deadline-period">26–30 May 2026</div>
+      </div>`;
+  } else {
+    const { days, hours, minutes, colorClass } = diffParts(schoolDl - now);
+    schoolCard = `
+      <div class="deadline-card">
+        <div class="deadline-card-label">School submissions close in:</div>
+        <div class="deadline-timer ${colorClass}">${days}d ${hours}h ${minutes}m</div>
+      </div>`;
+  }
+
+  let zoneCard;
+  if (now > zoneDl) {
+    zoneCard = `
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone Submissions</div>
+        <span class="deadline-badge-closed">CLOSED</span>
+        <div class="deadline-period">1–5 June 2026</div>
+      </div>`;
+  } else if (now < zoneOpenDt) {
+    const { days, colorClass } = diffParts(zoneOpenDt - now);
+    zoneCard = `
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone submissions open in:</div>
+        <div class="deadline-timer ${colorClass}">${days} day${days !== 1 ? 's' : ''}</div>
+      </div>`;
+  } else {
+    const { days, hours, minutes, colorClass } = diffParts(zoneDl - now);
+    zoneCard = `
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone submissions close in:</div>
+        <div class="deadline-timer ${colorClass}">${days}d ${hours}h ${minutes}m</div>
+      </div>`;
+  }
+
+  el.innerHTML = schoolCard + zoneCard;
+}
+
+function diffParts(ms) {
+  const total   = Math.max(0, Math.floor(ms / 60000));
+  const days    = Math.floor(total / 1440);
+  const hours   = Math.floor((total % 1440) / 60);
+  const minutes = total % 60;
+  const colorClass = ms <= 24 * 60 * 60 * 1000   ? 'timer-red'
+                   : ms <= 3 * 24 * 60 * 60 * 1000 ? 'timer-orange'
+                   : 'timer-green';
+  return { days, hours, minutes, colorClass };
 }
 
 function roleLabel(role) {
@@ -160,6 +357,19 @@ function startFlow(mode) {
   }
   if (mode === 'dashboard' && role !== 'District') {
     showAccessDenied('dashboard'); return;
+  }
+
+  // Deadline guard — District bypasses all deadline restrictions
+  if (role !== 'District') {
+    if (mode === 'school' && schoolClosed()) {
+      showDeadlineClosed('school'); return;
+    }
+    if (mode === 'zone' && zoneNotOpen()) {
+      showDeadlineNotOpen(); return;
+    }
+    if (mode === 'zone' && zoneClosed()) {
+      showDeadlineClosed('zone'); return;
+    }
   }
 
   currentMode = mode;
@@ -230,6 +440,7 @@ function signOut() {
   lockAllButtons();
   document.getElementById('landing-phone').value = '';
   document.getElementById('landing-auth-msg').innerHTML = '';
+  if (typeof WelcomeStats !== 'undefined') WelcomeStats.hide();
   backToLanding();
 }
 

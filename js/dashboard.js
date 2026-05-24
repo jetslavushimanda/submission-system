@@ -195,7 +195,10 @@ const Dashboard = (() => {
 
     updateLastUpdated(data.cachedAt);
 
+    const corrections = data.corrections || [];
+
     body.innerHTML = `
+${renderCorrections(corrections)}
 ${renderOverview(data.overview)}
 ${renderZones(data.zones)}
 ${renderSchoolList(data.schoolList)}
@@ -207,6 +210,107 @@ ${renderActions(data)}`;
     bindSchoolSearch();
     bindZoneToggles();
     bindSchoolRows();
+    bindCorrectionButtons();
+  }
+
+  // ── Section 0: Pending Corrections ───────────────────────────
+  function renderCorrections(corrections) {
+    const pending  = corrections.filter(c => c.status === 'Pending');
+    const resolved = corrections.filter(c => c.status !== 'Pending');
+    const badge    = pending.length > 0
+      ? `<span class="db-corr-badge">${pending.length}</span>` : '';
+
+    const pendingCards = pending.length === 0
+      ? '<div class="db-corr-empty">No pending correction requests.</div>'
+      : pending.map(c => correctionCard(c)).join('');
+
+    const resolvedSection = resolved.length === 0 ? '' : `
+<div class="db-corr-resolved-header">Recently Resolved</div>
+${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
+
+    return `
+<div class="db-section db-section-corrections">
+  <div class="db-section-title">Pending Corrections ${badge}</div>
+  <div class="db-corr-body">
+    ${pendingCards}
+    ${resolvedSection}
+  </div>
+</div>`;
+  }
+
+  function correctionCard(c) {
+    const isPending  = c.status === 'Pending';
+    const isApproved = c.status === 'Approved';
+    const statusCls  = isPending  ? 'db-corr-s-pending'
+                     : isApproved ? 'db-corr-s-approved'
+                     : 'db-corr-s-rejected';
+    const statusIcon = isPending  ? '&#9203;'
+                     : isApproved ? '&#10003;'
+                     : '&#10007;';
+    const actions = isPending ? `
+<div class="db-corr-actions">
+  <button class="db-corr-approve" data-reqid="${esc(c.requestId)}">&#10003; Approve</button>
+  <button class="db-corr-reject"  data-reqid="${esc(c.requestId)}">&#10007; Reject</button>
+</div>` : `
+<div class="db-corr-decided">
+  Decided by <strong>${esc(c.decidedBy || '—')}</strong>
+</div>`;
+
+    return `
+<div class="db-corr-card" data-reqid="${esc(c.requestId)}">
+  <div class="db-corr-card-top">
+    <span class="db-corr-ref">${esc(c.refNumber)}</span>
+    <span class="db-corr-school">${esc(c.schoolOrZone)}</span>
+    <span class="db-corr-status ${statusCls}">${statusIcon} ${esc(c.status)}</span>
+  </div>
+  <div class="db-corr-participant">
+    Participant: <strong>${esc(c.participantName || '—')}</strong>
+    &nbsp;&bull;&nbsp; ${esc(c.coordinatorName || '—')}
+  </div>
+  <div class="db-corr-section-lbl">What to correct:</div>
+  <div class="db-corr-text">${esc(c.whatToCorrect)}</div>
+  <div class="db-corr-section-lbl">Correct information:</div>
+  <div class="db-corr-text db-corr-text-info">${esc(c.correctInfo)}</div>
+  ${actions}
+</div>`;
+  }
+
+  function bindCorrectionButtons() {
+    document.querySelectorAll('.db-corr-approve, .db-corr-reject').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const requestId = btn.dataset.reqid;
+        const decision  = btn.classList.contains('db-corr-approve') ? 'Approved' : 'Rejected';
+        const label     = decision === 'Approved' ? 'Approve' : 'Reject';
+
+        if (!confirm(`${label} this correction request?\n\nRef: ${requestId}`)) return;
+
+        btn.disabled    = true;
+        btn.textContent = decision === 'Approved' ? 'Approving…' : 'Rejecting…';
+
+        try {
+          const res = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action:    'handleCorrectionDecision',
+              phone:     _auth.phone,
+              requestId: requestId,
+              decision:  decision,
+            }),
+          });
+          if (!res.ok) throw new Error('Server error ' + res.status);
+          const data = await res.json();
+          if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
+
+          // Refresh the dashboard to show updated state
+          loadFullData(true);
+
+        } catch (err) {
+          alert('Could not record decision: ' + err.message);
+          btn.disabled    = false;
+          btn.textContent = label;
+        }
+      });
+    });
   }
 
   // ── Section 1: Overview ───────────────────────────────────────
