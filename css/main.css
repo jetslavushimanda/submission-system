@@ -167,6 +167,73 @@ body {
   text-align: center;
 }
 
+/* Phone verification section */
+.landing-verify-section {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.landing-phone-wrap {
+  display: flex;
+  gap: 8px;
+}
+
+.landing-phone-input {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-family: var(--font);
+  color: var(--text);
+}
+
+.landing-phone-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(26, 92, 42, 0.12);
+}
+
+.btn-verify {
+  padding: 12px 18px;
+  background: var(--green);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-verify:active { background: var(--green-dark); }
+.btn-verify:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.auth-msg-ok {
+  font-size: 14px;
+  color: #145a23;
+  background: #e8f5ec;
+  border: 1px solid #b2dfbc;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0;
+}
+
+.auth-msg-error {
+  font-size: 14px;
+  color: #b71c1c;
+  background: #fdecea;
+  border: 1px solid #f5c6c6;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* Submission buttons */
 .btn-submit {
   display: flex;
@@ -182,14 +249,22 @@ body {
   color: var(--white);
   box-shadow: var(--shadow);
   gap: 5px;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   text-align: center;
 }
 
-.btn-submit:active {
+.btn-submit:active:not(:disabled) {
   transform: scale(0.97);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn-submit:disabled,
+.btn-submit.btn-disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: grayscale(40%);
 }
 
 .btn-title {

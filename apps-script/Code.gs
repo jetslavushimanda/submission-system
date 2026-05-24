@@ -68,6 +68,7 @@ function doPost(e) {
           schoolType:    auth.schoolType,
           organiserName: auth.organiserName,
           phone:         auth.phone,
+          role:          auth.role,
         };
       } else {
         result = {
@@ -78,14 +79,28 @@ function doPost(e) {
       }
 
     } else if (action === "submitSchool") {
-      // school.gs — append to Tab 2, optionally upload report
-      result = submitSchoolParticipant(payload);
-      if (result.status === 'ok') updateDashboard_();
+      // Verify role before accepting — backend enforcement of access control.
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Access denied. Phone number not registered.' };
+      } else if (authCheck.role !== 'School' && authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Access Denied. You are not authorised to submit School forms.' };
+      } else {
+        result = submitSchoolParticipant(payload);
+        if (result.status === 'ok') updateDashboard_();
+      }
 
     } else if (action === "submitZone") {
-      // zone.gs — append to Tab 3, optionally upload report
-      result = submitZoneParticipant(payload);
-      if (result.status === 'ok') updateDashboard_();
+      // Verify role before accepting — backend enforcement of access control.
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Access denied. Phone number not registered.' };
+      } else if (authCheck.role !== 'Zone' && authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Access Denied. You are not authorised to submit Zone forms.' };
+      } else {
+        result = submitZoneParticipant(payload);
+        if (result.status === 'ok') updateDashboard_();
+      }
 
     } else if (action === "getCount") {
       // Inline: count Tab 2 rows for the requesting school
@@ -107,7 +122,6 @@ function doPost(e) {
 // ── getCount ──────────────────────────────────────────────────
 // Called by school-form.js to show the slot-usage progress bar.
 // Counts all rows in Tab 2 whose School Name (col D) matches.
-// Payload: { gmail, schoolName }
 function getSchoolCount(payload) {
   var schoolName = trim_(payload.schoolName);
   if (!schoolName) return { count: 0 };
@@ -156,8 +170,8 @@ function saveReportToDrive(base64Data, fileName, mimeType) {
 
 // ── updateDashboard_ ──────────────────────────────────────────
 // Rebuilds Tab 4 ("District Dashboard") with live COUNTIF formulas
-// after every successful school or zone submission.  Formula-based
-// cells auto-update whenever the underlying tabs change.
+// after every successful school or zone submission.
+// Note: Status is now column G (after Role was inserted as column F).
 function updateDashboard_() {
   var dash = openSheet_(TAB_DASHBOARD);
   if (!dash) return;
@@ -178,11 +192,12 @@ function updateDashboard_() {
     dash.getRange(r, 2).setFormula('=COUNTIF(\'School Submissions\'!C:C,"' + zn + '")');
     dash.getRange(r, 3).setFormula('=COUNTIF(\'Zone Submissions\'!C:C,"' + zn + '")');
     dash.getRange(r, 4).setFormula('=B' + r + '+C' + r);
+    // Status is now col G in Tab 1
     dash.getRange(r, 5).setFormula(
-      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!F:F,"Active")'
+      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!G:G,"Active")'
     );
     dash.getRange(r, 6).setFormula(
-      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!F:F,"Inactive")'
+      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!G:G,"Inactive")'
     );
   }
 
@@ -232,93 +247,94 @@ function setupSystem() {
 
   // ── Step 2: Tab 1 — Registered Schools ──────────────────────
   var tab1 = ss.getActiveSheet().setName('Registered Schools');
-  tab1.getRange(1, 1, 1, 6).setValues([[
-    'Zone', 'School Name', 'School Type', 'Organiser Name', 'Phone', 'Status'
+  tab1.getRange(1, 1, 1, 7).setValues([[
+    'Zone', 'School Name', 'School Type', 'Organiser Name', 'Phone', 'Role', 'Status'
   ]]);
 
   var schoolRows = [
-    // ─ District JETS Executive Committee (DEC) ─────────────────
-    ['DISTRICT', 'DEC', 'DEC', 'Mukuka Davy',    '0977768103', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Nakamba Gladys',  '0974245077', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Namwinga Dorica', '0978466186', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Tafuna Alex',     '0977202388', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Kaleya Justin',   '0979563644', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Mwansa Gibson',   '0973375828', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Chuma Chomi',     '0979160918', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Chanda Emeldah',  '0772524170', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Mukamba Ruth',    '0961980482', 'Active'],
-    ['DISTRICT', 'DEC', 'DEC', 'Chilunga Linda',  '0955379572', 'Active'],
-    // ─ Zonal JETS Coordinators ─────────────────────────────────
-    ['Chiundaponde', 'Chiundaponde Secondary',  'Secondary School',   'Kaluba Moses',     '0955756491', 'Active'],
-    ['Kalonje',      'Kalonje Secondary',        'Secondary School',   'Simbaya Felix',    '0975732550', 'Active'],
-    ['Lukulu',       'Lukulu Day Secondary',      'Secondary School',   'Silomba Frank',    '0968875977', 'Active'],
-    ['Mpumba',       'Mpumba Primary',            'Primary School',     'Siafunda Carlos',  '0776337582', 'Active'],
-    ['Mwelushi',     'Kapilya Open Centre',       'Open Centre School', 'Chipwepwe Nelson', '0974525316', 'Active'],
-    // ─ Mpumba Zone ─────────────────────────────────────────────
-    ['Mpumba', 'Kapengwe Open Centre',         'Open Centre School', 'Kashishi Sydney',   '0972099165', 'Active'  ],
-    ['Mpumba', 'Mpumba Primary',               'Primary School',     'Siafunda Carlos',   '0972086640', 'Active'  ],
-    ['Mpumba', 'Muchelenje Open Centre',       'Open Centre School', 'Banda Grandson',    '0979865581', 'Active'  ],
-    ['Mpumba', 'Mununga Primary',              'Primary School',     'Moonga Choonya',    '0974851171', 'Active'  ],
-    ['Mpumba', 'Mununga Secondary',            'Secondary School',   'Sota Charles',      '0970179112', 'Active'  ],
-    ['Mpumba', 'Mwenda Primary',               'Primary School',     'PENDING',           'PENDING',    'Inactive'],
-    ['Mpumba', 'Red Rhino Secondary',          'Secondary School',   'Mwalimu Musatwe',   '0972291796', 'Active'  ],
-    ['Mpumba', 'Salamo Primary',               'Primary School',     'Phiri Silvester',   '0974791924', 'Active'  ],
-    ['Mpumba', 'Salamo Secondary',             'Secondary School',   'Loloma Gimel',      '0974654057', 'Active'  ],
-    ['Mpumba', 'Tubondo Primary',              'Primary School',     'PENDING',           'PENDING',    'Inactive'],
-    ['Mpumba', 'Khem Private School',          'Private School',     'PENDING',           'PENDING',    'Inactive'],
-    ['Mpumba', 'St. Rochester Private School', 'Private School',     'PENDING',           'PENDING',    'Inactive'],
-    // ─ Chiundaponde Zone ───────────────────────────────────────
-    ['Chiundaponde', 'Chiundaponde Primary',   'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Chiundaponde', 'Lulimala Primary',       'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Chiundaponde', 'Chifinshi Primary',      'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Chiundaponde', 'Makanga Primary',        'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Chiundaponde', 'Ngweshi Primary',        'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Chiundaponde', 'Chiundaponde Secondary', 'Secondary School',   'PENDING', 'PENDING', 'Inactive'],
-    // ─ Lukulu Zone ─────────────────────────────────────────────
-    ['Lukulu', 'Chito Primary',         'Primary School',   'Chavula Alex',    '0962087974', 'Active'],
-    ['Lukulu', 'Kapololo Primary',      'Primary School',   'Chola Christine',  '0775158648', 'Active'],
-    ['Lukulu', 'Kapwanya Primary',      'Primary School',   'Banda Elias',      '0978600778', 'Active'],
-    ['Lukulu', 'Lukulu Primary',        'Primary School',   'Kanchela Bertha',  '0977155763', 'Active'],
-    ['Lukulu', 'Lukulu Day Secondary',  'Secondary School', 'Kasakula Ackson',  '0966406465', 'Active'],
-    ['Lukulu', 'Mabonga Primary',       'Primary School',   'Mupinde Patrick',  '0978935433', 'Active'],
-    ['Lukulu', 'Mpomfu Primary',        'Primary School',   'Mubanga Max',      '0965573696', 'Active'],
-    ['Lukulu', 'Nsansha Primary',       'Primary School',   'Mtonga Hambe',     '0967329360', 'Active'],
-    // ─ Kalonje Zone ────────────────────────────────────────────
-    ['Kalonje', 'Chilebela Primary',        'Primary School',     'Sichone Jane',         '0950934985', 'Active'  ],
-    ['Kalonje', 'Finkuli Open Centre',      'Open Centre School', 'Sabi Fridah',           '0977672828', 'Active'  ],
-    ['Kalonje', 'Kalonje Primary',          'Primary School',     'PENDING',              'PENDING',    'Inactive'],
-    ['Kalonje', 'Kalonje Secondary',        'Secondary School',   'Chilunga Mwape Linda', '0955379572', 'Active'  ],
-    ['Kalonje', 'Kamwendo Primary',         'Primary School',     'PENDING',              'PENDING',    'Inactive'],
-    ['Kalonje', 'Mabyulu Primary',          'Primary School',     'PENDING',              'PENDING',    'Inactive'],
-    ['Kalonje', 'Mupamadzi Open Centre',    'Open Centre School', 'PENDING',              'PENDING',    'Inactive'],
-    ['Kalonje', 'Mutumba Community School', 'Community School',   'PENDING',              'PENDING',    'Inactive'],
-    // ─ Mwelushi Zone ───────────────────────────────────────────
-    ['Mwelushi', 'Mwila Chilembwe Primary', 'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Mwendachabe Primary',     'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Chipelembe Primary',      'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Kapilya Open Centre',     'Open Centre School', 'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Mwelushi Primary',        'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Muwele Primary',          'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Milomfi Primary',         'Primary School',     'PENDING', 'PENDING', 'Inactive'],
-    ['Mwelushi', 'Chibali Primary',         'Primary School',     'PENDING', 'PENDING', 'Inactive'],
+    // ─ District JETS Executive Committee (DEC) — Role: District ──
+    ['DISTRICT', 'DEC', 'DEC', 'Mukuka Davy',    '0977768103', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Nakamba Gladys',  '0974245077', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Namwinga Dorica', '0978466186', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Tafuna Alex',     '0977202388', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Kaleya Justin',   '0979563644', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Mwansa Gibson',   '0973375828', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chuma Chomi',     '0979160918', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chanda Emeldah',  '0772524170', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Mukamba Ruth',    '0961980482', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chilunga Linda',  '0955379572', 'District', 'Active'],
+    // ─ Zonal JETS Coordinators — Role: Zone ────────────────────
+    ['Chiundaponde', 'Chiundaponde Secondary',  'Secondary School',   'Kaluba Moses',     '0955756491', 'Zone', 'Active'],
+    ['Kalonje',      'Kalonje Secondary',        'Secondary School',   'Simbaya Felix',    '0975732550', 'Zone', 'Active'],
+    ['Lukulu',       'Lukulu Day Secondary',      'Secondary School',   'Silomba Frank',    '0968875977', 'Zone', 'Active'],
+    ['Mpumba',       'Mpumba Primary',            'Primary School',     'Siafunda Carlos',  '0776337582', 'Zone', 'Active'],
+    ['Mwelushi',     'Kapilya Open Centre',       'Open Centre School', 'Chipwepwe Nelson', '0974525316', 'Zone', 'Active'],
+    // ─ Mpumba Zone — Role: School ──────────────────────────────
+    ['Mpumba', 'Kapengwe Open Centre',         'Open Centre School', 'Kashishi Sydney',   '0972099165', 'School', 'Active'  ],
+    ['Mpumba', 'Mpumba Primary',               'Primary School',     'Siafunda Carlos',   '0972086640', 'School', 'Active'  ],
+    ['Mpumba', 'Muchelenje Open Centre',       'Open Centre School', 'Banda Grandson',    '0979865581', 'School', 'Active'  ],
+    ['Mpumba', 'Mununga Primary',              'Primary School',     'Moonga Choonya',    '0974851171', 'School', 'Active'  ],
+    ['Mpumba', 'Mununga Secondary',            'Secondary School',   'Sota Charles',      '0970179112', 'School', 'Active'  ],
+    ['Mpumba', 'Mwenda Primary',               'Primary School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'Red Rhino Secondary',          'Secondary School',   'Mwalimu Musatwe',   '0972291796', 'School', 'Active'  ],
+    ['Mpumba', 'Salamo Primary',               'Primary School',     'Phiri Silvester',   '0974791924', 'School', 'Active'  ],
+    ['Mpumba', 'Salamo Secondary',             'Secondary School',   'Loloma Gimel',      '0974654057', 'School', 'Active'  ],
+    ['Mpumba', 'Tubondo Primary',              'Primary School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'Khem Private School',          'Private School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'St. Rochester Private School', 'Private School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    // ─ Chiundaponde Zone — Role: School ────────────────────────
+    ['Chiundaponde', 'Chiundaponde Primary',   'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Lulimala Primary',       'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Chifinshi Primary',      'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Makanga Primary',        'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Ngweshi Primary',        'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Chiundaponde Secondary', 'Secondary School', 'PENDING', 'PENDING', 'School', 'Inactive'],
+    // ─ Lukulu Zone — Role: School ──────────────────────────────
+    ['Lukulu', 'Chito Primary',        'Primary School',   'Chavula Alex',    '0962087974', 'School', 'Active'],
+    ['Lukulu', 'Kapololo Primary',     'Primary School',   'Chola Christine',  '0775158648', 'School', 'Active'],
+    ['Lukulu', 'Kapwanya Primary',     'Primary School',   'Banda Elias',      '0978600778', 'School', 'Active'],
+    ['Lukulu', 'Lukulu Primary',       'Primary School',   'Kanchela Bertha',  '0977155763', 'School', 'Active'],
+    ['Lukulu', 'Lukulu Day Secondary', 'Secondary School', 'Kasakula Ackson',  '0966406465', 'School', 'Active'],
+    ['Lukulu', 'Mabonga Primary',      'Primary School',   'Mupinde Patrick',  '0978935433', 'School', 'Active'],
+    ['Lukulu', 'Mpomfu Primary',       'Primary School',   'Mubanga Max',      '0965573696', 'School', 'Active'],
+    ['Lukulu', 'Nsansha Primary',      'Primary School',   'Mtonga Hambe',     '0967329360', 'School', 'Active'],
+    // ─ Kalonje Zone — Role: School ─────────────────────────────
+    ['Kalonje', 'Chilebela Primary',        'Primary School',     'Sichone Jane',         '0950934985', 'School', 'Active'  ],
+    ['Kalonje', 'Finkuli Open Centre',      'Open Centre School', 'Sabi Fridah',           '0977672828', 'School', 'Active'  ],
+    ['Kalonje', 'Kalonje Primary',          'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Kalonje Secondary',        'Secondary School',   'Chilunga Mwape Linda', '0955379572', 'School', 'Active'  ],
+    ['Kalonje', 'Kamwendo Primary',         'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mabyulu Primary',          'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mupamadzi Open Centre',    'Open Centre School', 'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mutumba Community School', 'Community School',   'PENDING',              'PENDING',    'School', 'Inactive'],
+    // ─ Mwelushi Zone — Role: School ────────────────────────────
+    ['Mwelushi', 'Mwila Chilembwe Primary', 'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Mwendachabe Primary',     'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Chipelembe Primary',      'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Kapilya Open Centre',     'Open Centre School', 'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Mwelushi Primary',        'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Muwele Primary',          'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Milomfi Primary',         'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Chibali Primary',         'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
   ];
 
   // Force phone column (E) to plain text BEFORE writing so leading zeros are kept
   tab1.getRange(2, 5, schoolRows.length, 1).setNumberFormat('@');
-  tab1.getRange(2, 1, schoolRows.length, 6).setValues(schoolRows);
+  tab1.getRange(2, 1, schoolRows.length, 7).setValues(schoolRows);
 
   // Header: dark green / white bold
-  tab1.getRange(1, 1, 1, 6)
+  tab1.getRange(1, 1, 1, 7)
     .setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
 
   // Row colours: light green = Active, light red = Inactive/Pending
+  // Status is now index 6 (column G)
   for (var i = 0; i < schoolRows.length; i++) {
-    tab1.getRange(i + 2, 1, 1, 6)
-      .setBackground(schoolRows[i][5] === 'Active' ? '#d9ead3' : '#fce8e6');
+    tab1.getRange(i + 2, 1, 1, 7)
+      .setBackground(schoolRows[i][6] === 'Active' ? '#d9ead3' : '#fce8e6');
   }
 
   tab1.setFrozenRows(1);
-  tab1.autoResizeColumns(1, 6);
+  tab1.autoResizeColumns(1, 7);
 
   // ── Step 3: Tab 2 — School Submissions ──────────────────────
   var tab2 = ss.insertSheet('School Submissions');
@@ -369,11 +385,12 @@ function setupSystem() {
       '=COUNTIF(\'Zone Submissions\'!C:C,"' + zn + '")'
     );
     tab4.getRange(r, 4).setFormula('=B' + r + '+C' + r);
+    // Status is now col G in Tab 1 (Role was inserted as col F)
     tab4.getRange(r, 5).setFormula(
-      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!F:F,"Active")'
+      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!G:G,"Active")'
     );
     tab4.getRange(r, 6).setFormula(
-      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!F:F,"Inactive")'
+      '=COUNTIFS(\'Registered Schools\'!A:A,"' + zn + '",\'Registered Schools\'!G:G,"Inactive")'
     );
   }
 
@@ -403,8 +420,6 @@ function setupSystem() {
   // ── Step 7: Persist IDs to Script Properties ─────────────────
   props.setProperties({ SHEET_ID: sheetId, DRIVE_FOLDER_ID: mainFolderId });
 
-  // Refresh module-level vars so subsequent calls in this execution
-  // already use the real IDs without a restart.
   SHEET_ID        = sheetId;
   DRIVE_FOLDER_ID = mainFolderId;
 
@@ -424,94 +439,99 @@ function setupSystem() {
 }
 
 // ── reloadSchoolData ──────────────────────────────────────────
-// Run this from the Apps Script editor to reload Tab 1 data into
-// the existing sheet without creating a new one.
-// Use this if phone numbers were saved without leading zeros.
+// Run from the Apps Script editor to reload Tab 1 with the correct
+// 7-column layout (Zone, School Name, School Type, Organiser Name,
+// Phone, Role, Status) without creating a new sheet.
 function reloadSchoolData() {
   var ss   = SpreadsheetApp.openById(SHEET_ID);
   var tab1 = ss.getSheetByName(TAB_REGISTERED);
   if (!tab1) { Logger.log('Tab "Registered Schools" not found.'); return; }
 
   var schoolRows = [
-    ['DISTRICT','DEC','DEC','Mukuka Davy','0977768103','Active'],
-    ['DISTRICT','DEC','DEC','Nakamba Gladys','0974245077','Active'],
-    ['DISTRICT','DEC','DEC','Namwinga Dorica','0978466186','Active'],
-    ['DISTRICT','DEC','DEC','Tafuna Alex','0977202388','Active'],
-    ['DISTRICT','DEC','DEC','Kaleya Justin','0979563644','Active'],
-    ['DISTRICT','DEC','DEC','Mwansa Gibson','0973375828','Active'],
-    ['DISTRICT','DEC','DEC','Chuma Chomi','0979160918','Active'],
-    ['DISTRICT','DEC','DEC','Chanda Emeldah','0772524170','Active'],
-    ['DISTRICT','DEC','DEC','Mukamba Ruth','0961980482','Active'],
-    ['DISTRICT','DEC','DEC','Chilunga Linda','0955379572','Active'],
-    ['Chiundaponde','Chiundaponde Secondary','Secondary School','Kaluba Moses','0955756491','Active'],
-    ['Kalonje','Kalonje Secondary','Secondary School','Simbaya Felix','0975732550','Active'],
-    ['Lukulu','Lukulu Day Secondary','Secondary School','Silomba Frank','0968875977','Active'],
-    ['Mpumba','Mpumba Primary','Primary School','Siafunda Carlos','0776337582','Active'],
-    ['Mwelushi','Kapilya Open Centre','Open Centre School','Chipwepwe Nelson','0974525316','Active'],
-    ['Mpumba','Kapengwe Open Centre','Open Centre School','Kashishi Sydney','0972099165','Active'],
-    ['Mpumba','Mpumba Primary','Primary School','Siafunda Carlos','0972086640','Active'],
-    ['Mpumba','Muchelenje Open Centre','Open Centre School','Banda Grandson','0979865581','Active'],
-    ['Mpumba','Mununga Primary','Primary School','Moonga Choonya','0974851171','Active'],
-    ['Mpumba','Mununga Secondary','Secondary School','Sota Charles','0970179112','Active'],
-    ['Mpumba','Mwenda Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mpumba','Red Rhino Secondary','Secondary School','Mwalimu Musatwe','0972291796','Active'],
-    ['Mpumba','Salamo Primary','Primary School','Phiri Silvester','0974791924','Active'],
-    ['Mpumba','Salamo Secondary','Secondary School','Loloma Gimel','0974654057','Active'],
-    ['Mpumba','Tubondo Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mpumba','Khem Private School','Private School','PENDING','PENDING','Inactive'],
-    ['Mpumba','St. Rochester Private School','Private School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Chiundaponde Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Lulimala Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Chifinshi Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Makanga Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Ngweshi Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Chiundaponde','Chiundaponde Secondary','Secondary School','PENDING','PENDING','Inactive'],
-    ['Lukulu','Chito Primary','Primary School','Chavula Alex','0962087974','Active'],
-    ['Lukulu','Kapololo Primary','Primary School','Chola Christine','0775158648','Active'],
-    ['Lukulu','Kapwanya Primary','Primary School','Banda Elias','0978600778','Active'],
-    ['Lukulu','Lukulu Primary','Primary School','Kanchela Bertha','0977155763','Active'],
-    ['Lukulu','Lukulu Day Secondary','Secondary School','Kasakula Ackson','0966406465','Active'],
-    ['Lukulu','Mabonga Primary','Primary School','Mupinde Patrick','0978935433','Active'],
-    ['Lukulu','Mpomfu Primary','Primary School','Mubanga Max','0965573696','Active'],
-    ['Lukulu','Nsansha Primary','Primary School','Mtonga Hambe','0967329360','Active'],
-    ['Kalonje','Chilebela Primary','Primary School','Sichone Jane','0950934985','Active'],
-    ['Kalonje','Finkuli Open Centre','Open Centre School','Sabi Fridah','0977672828','Active'],
-    ['Kalonje','Kalonje Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Kalonje','Kalonje Secondary','Secondary School','Chilunga Mwape Linda','0955379572','Active'],
-    ['Kalonje','Kamwendo Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Kalonje','Mabyulu Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Kalonje','Mupamadzi Open Centre','Open Centre School','PENDING','PENDING','Inactive'],
-    ['Kalonje','Mutumba Community School','Community School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Mwila Chilembwe Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Mwendachabe Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Chipelembe Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Kapilya Open Centre','Open Centre School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Mwelushi Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Muwele Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Milomfi Primary','Primary School','PENDING','PENDING','Inactive'],
-    ['Mwelushi','Chibali Primary','Primary School','PENDING','PENDING','Inactive'],
+    ['DISTRICT', 'DEC', 'DEC', 'Mukuka Davy',    '0977768103', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Nakamba Gladys',  '0974245077', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Namwinga Dorica', '0978466186', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Tafuna Alex',     '0977202388', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Kaleya Justin',   '0979563644', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Mwansa Gibson',   '0973375828', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chuma Chomi',     '0979160918', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chanda Emeldah',  '0772524170', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Mukamba Ruth',    '0961980482', 'District', 'Active'],
+    ['DISTRICT', 'DEC', 'DEC', 'Chilunga Linda',  '0955379572', 'District', 'Active'],
+    ['Chiundaponde', 'Chiundaponde Secondary',  'Secondary School',   'Kaluba Moses',     '0955756491', 'Zone', 'Active'],
+    ['Kalonje',      'Kalonje Secondary',        'Secondary School',   'Simbaya Felix',    '0975732550', 'Zone', 'Active'],
+    ['Lukulu',       'Lukulu Day Secondary',      'Secondary School',   'Silomba Frank',    '0968875977', 'Zone', 'Active'],
+    ['Mpumba',       'Mpumba Primary',            'Primary School',     'Siafunda Carlos',  '0776337582', 'Zone', 'Active'],
+    ['Mwelushi',     'Kapilya Open Centre',       'Open Centre School', 'Chipwepwe Nelson', '0974525316', 'Zone', 'Active'],
+    ['Mpumba', 'Kapengwe Open Centre',         'Open Centre School', 'Kashishi Sydney',   '0972099165', 'School', 'Active'  ],
+    ['Mpumba', 'Mpumba Primary',               'Primary School',     'Siafunda Carlos',   '0972086640', 'School', 'Active'  ],
+    ['Mpumba', 'Muchelenje Open Centre',       'Open Centre School', 'Banda Grandson',    '0979865581', 'School', 'Active'  ],
+    ['Mpumba', 'Mununga Primary',              'Primary School',     'Moonga Choonya',    '0974851171', 'School', 'Active'  ],
+    ['Mpumba', 'Mununga Secondary',            'Secondary School',   'Sota Charles',      '0970179112', 'School', 'Active'  ],
+    ['Mpumba', 'Mwenda Primary',               'Primary School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'Red Rhino Secondary',          'Secondary School',   'Mwalimu Musatwe',   '0972291796', 'School', 'Active'  ],
+    ['Mpumba', 'Salamo Primary',               'Primary School',     'Phiri Silvester',   '0974791924', 'School', 'Active'  ],
+    ['Mpumba', 'Salamo Secondary',             'Secondary School',   'Loloma Gimel',      '0974654057', 'School', 'Active'  ],
+    ['Mpumba', 'Tubondo Primary',              'Primary School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'Khem Private School',          'Private School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Mpumba', 'St. Rochester Private School', 'Private School',     'PENDING',           'PENDING',    'School', 'Inactive'],
+    ['Chiundaponde', 'Chiundaponde Primary',   'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Lulimala Primary',       'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Chifinshi Primary',      'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Makanga Primary',        'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Ngweshi Primary',        'Primary School',   'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Chiundaponde', 'Chiundaponde Secondary', 'Secondary School', 'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Lukulu', 'Chito Primary',        'Primary School',   'Chavula Alex',    '0962087974', 'School', 'Active'],
+    ['Lukulu', 'Kapololo Primary',     'Primary School',   'Chola Christine',  '0775158648', 'School', 'Active'],
+    ['Lukulu', 'Kapwanya Primary',     'Primary School',   'Banda Elias',      '0978600778', 'School', 'Active'],
+    ['Lukulu', 'Lukulu Primary',       'Primary School',   'Kanchela Bertha',  '0977155763', 'School', 'Active'],
+    ['Lukulu', 'Lukulu Day Secondary', 'Secondary School', 'Kasakula Ackson',  '0966406465', 'School', 'Active'],
+    ['Lukulu', 'Mabonga Primary',      'Primary School',   'Mupinde Patrick',  '0978935433', 'School', 'Active'],
+    ['Lukulu', 'Mpomfu Primary',       'Primary School',   'Mubanga Max',      '0965573696', 'School', 'Active'],
+    ['Lukulu', 'Nsansha Primary',      'Primary School',   'Mtonga Hambe',     '0967329360', 'School', 'Active'],
+    ['Kalonje', 'Chilebela Primary',        'Primary School',     'Sichone Jane',         '0950934985', 'School', 'Active'  ],
+    ['Kalonje', 'Finkuli Open Centre',      'Open Centre School', 'Sabi Fridah',           '0977672828', 'School', 'Active'  ],
+    ['Kalonje', 'Kalonje Primary',          'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Kalonje Secondary',        'Secondary School',   'Chilunga Mwape Linda', '0955379572', 'School', 'Active'  ],
+    ['Kalonje', 'Kamwendo Primary',         'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mabyulu Primary',          'Primary School',     'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mupamadzi Open Centre',    'Open Centre School', 'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Kalonje', 'Mutumba Community School', 'Community School',   'PENDING',              'PENDING',    'School', 'Inactive'],
+    ['Mwelushi', 'Mwila Chilembwe Primary', 'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Mwendachabe Primary',     'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Chipelembe Primary',      'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Kapilya Open Centre',     'Open Centre School', 'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Mwelushi Primary',        'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Muwele Primary',          'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Milomfi Primary',         'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
+    ['Mwelushi', 'Chibali Primary',         'Primary School',     'PENDING', 'PENDING', 'School', 'Inactive'],
   ];
 
   // Clear old data rows (keep header)
   if (tab1.getLastRow() > 1) {
-    tab1.getRange(2, 1, tab1.getLastRow() - 1, 6).clearContent().clearFormat();
+    tab1.getRange(2, 1, tab1.getLastRow() - 1, 7).clearContent().clearFormat();
   }
+
+  // Write header with updated 7-column layout
+  tab1.getRange(1, 1, 1, 7).setValues([[
+    'Zone', 'School Name', 'School Type', 'Organiser Name', 'Phone', 'Role', 'Status'
+  ]]);
 
   // Force phone column as plain text to preserve leading zeros
   tab1.getRange(2, 5, schoolRows.length, 1).setNumberFormat('@');
-  tab1.getRange(2, 1, schoolRows.length, 6).setValues(schoolRows);
+  tab1.getRange(2, 1, schoolRows.length, 7).setValues(schoolRows);
 
   // Reapply header formatting
-  tab1.getRange(1, 1, 1, 6).setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
+  tab1.getRange(1, 1, 1, 7).setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
 
-  // Row colours
+  // Row colours — Status is now index 6
   for (var i = 0; i < schoolRows.length; i++) {
-    tab1.getRange(i + 2, 1, 1, 6)
-      .setBackground(schoolRows[i][5] === 'Active' ? '#d9ead3' : '#fce8e6');
+    tab1.getRange(i + 2, 1, 1, 7)
+      .setBackground(schoolRows[i][6] === 'Active' ? '#d9ead3' : '#fce8e6');
   }
 
   tab1.setFrozenRows(1);
-  tab1.autoResizeColumns(1, 6);
+  tab1.autoResizeColumns(1, 7);
 
   Logger.log('School data reloaded — ' + schoolRows.length + ' rows written.');
   Logger.log('Sheet URL: ' + ss.getUrl());

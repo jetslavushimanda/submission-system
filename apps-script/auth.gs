@@ -8,9 +8,8 @@
 //   C  School Type      e.g. Primary School
 //   D  Organiser Name   e.g. John Banda
 //   E  Phone            e.g. 0971234567  ← search key
-//   F  Status           "Active" | "Inactive"
-//
-// Gmail is reserved for future use; it is not stored in the sheet yet.
+//   F  Role             "School" | "Zone" | "District"
+//   G  Status           "Active" | "Inactive"
 //
 // SHEET_ID and TAB_REGISTERED are defined in Code.gs and shared
 // across all .gs files in the same Apps Script project.
@@ -22,23 +21,25 @@ var COL_SCHOOL = 1;  // B
 var COL_TYPE   = 2;  // C
 var COL_NAME   = 3;  // D
 var COL_PHONE  = 4;  // E  ← lookup key
-var COL_STATUS = 5;  // F
+var COL_ROLE   = 5;  // F  ← role-based access
+var COL_STATUS = 6;  // G
+
+// ── normalizePhone_ ───────────────────────────────────────────
+// Strips spaces, dashes, and leading zeros for reliable comparison.
+function normalizePhone_(p) {
+  return p.toString().replace(/[\s\-]/g, '').replace(/^0+/, '');
+}
 
 // ── checkRegistration ─────────────────────────────────────────
 // Searches column E (Phone) for a matching phone number.
 //
 // Returns one of:
-//   { found: true,  zone, schoolName, schoolType, organiserName, phone }
+//   { found: true,  zone, schoolName, schoolType, organiserName, phone, role }
 //   { found: false, reason: "inactive", message: "..." }
 //   { found: false }
 //
 // Called by Code.gs which translates this into the status-based
 // shape that app.js expects before sending to the client.
-// Strips spaces, dashes, and leading zeros for a reliable comparison.
-function normalizePhone_(p) {
-  return p.toString().replace(/[\s\-]/g, '').replace(/^0+/, '');
-}
-
 function checkRegistration(phone) {
   if (!phone) return { found: false };
 
@@ -51,8 +52,8 @@ function checkRegistration(phone) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) { Logger.log('No data rows in sheet'); return { found: false }; }
 
-  // Fetch all 6 columns in one call — avoids per-row API round-trips
-  var rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  // Fetch all 7 columns in one call — avoids per-row API round-trips
+  var rows = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
   Logger.log('Total rows read: ' + rows.length);
 
   for (var i = 0; i < rows.length; i++) {
@@ -79,6 +80,7 @@ function checkRegistration(phone) {
       schoolType:    row[COL_TYPE],
       organiserName: row[COL_NAME],
       phone:         rowPhone,
+      role:          row[COL_ROLE].toString().trim(),
     };
   }
 

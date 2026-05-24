@@ -49,17 +49,29 @@
     </header>
 
     <main class="landing-main">
-      <p class="select-prompt">Select your submission type:</p>
 
-      <button class="btn-submit btn-school-submit" id="btn-open-school">
+      <!-- Phone verification -->
+      <div class="landing-verify-section">
+        <p class="select-prompt">Enter your registered phone number to continue:</p>
+        <div class="landing-phone-wrap">
+          <input type="tel" id="landing-phone" class="landing-phone-input"
+                 placeholder="e.g. 0971234567" maxlength="15" autocomplete="tel" />
+          <button class="btn-verify" id="btn-verify">Verify</button>
+        </div>
+        <div id="landing-auth-msg"></div>
+      </div>
+
+      <!-- Form buttons — enabled/disabled based on role after verification -->
+      <button class="btn-submit btn-school-submit" id="btn-open-school" disabled>
         <span class="btn-title">SCHOOL SUBMISSION</span>
         <span class="btn-role">School JETS Organiser</span>
       </button>
 
-      <button class="btn-submit btn-zone-submit" id="btn-open-zone">
+      <button class="btn-submit btn-zone-submit" id="btn-open-zone" disabled>
         <span class="btn-title">ZONE SUBMISSION</span>
         <span class="btn-role">Zonal JETS Coordinator</span>
       </button>
+
     </main>
 
     <footer class="landing-footer">
@@ -81,27 +93,6 @@
     <!-- Rendered by js/zone-form.js -->
   </div>
 
-
-  <!-- ═══════════════════════════ SIGN-IN OVERLAY ════════════════════════ -->
-  <div id="signin-overlay" class="signin-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="signin-title">
-    <div class="signin-card">
-
-      <div id="signin-mode-badge" class="signin-mode-badge"></div>
-
-      <h2 class="signin-title" id="signin-title">Enter Your Phone Number</h2>
-      <p class="signin-desc">Use your registered phone number to access the submission form.</p>
-
-      <div class="phone-input-wrap">
-        <input type="tel" id="phone-input" class="phone-input"
-               placeholder="e.g. 0971234567" maxlength="15" autocomplete="tel" />
-        <p id="phone-error" class="phone-error"></p>
-        <button class="btn-phone-submit" id="btn-phone-submit">Continue &rarr;</button>
-      </div>
-
-      <button class="btn-signin-cancel" id="btn-signin-cancel">Cancel</button>
-
-    </div>
-  </div>
 
   <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════════ -->
   <script src="js/data.js"></script>
