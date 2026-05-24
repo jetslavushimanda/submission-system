@@ -14,7 +14,6 @@ const ZoneForm = (() => {
 
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
-    buildPtypeRadios([]);
     loadSlotCount();
   }
 
@@ -73,6 +72,7 @@ const ZoneForm = (() => {
     <button class="sf-tab-btn active" data-tab="learner">LEARNER</button>
     <button class="sf-tab-btn" data-tab="teacher">TEACHER</button>
     <button class="sf-tab-btn" data-tab="youth">YOUTH</button>
+    <button class="sf-tab-btn" data-tab="quiz">QUIZ</button>
     <button class="sf-tab-btn" data-tab="skills">SKILLS</button>
   </div>
 
@@ -114,17 +114,12 @@ const ZoneForm = (() => {
           <option value="">&#8212; Select Level First &#8212;</option>
         </select>
       </div>
-      <div class="field">
-        <label>Participant Type <span class="req">*</span></label>
-        <div class="radio-group" id="l-ptype-group"></div>
-      </div>
       <div class="field hidden" id="l-cat-field">
-        <label for="l-cat">Category <span class="req">*</span></label>
-        <select id="l-cat"><option value="">&#8212; Select Category &#8212;</option></select>
-      </div>
-      <div class="field hidden" id="l-subskill-field">
-        <label for="l-subskill">Sub-Skill <span class="req">*</span></label>
-        <select id="l-subskill"><option value="">&#8212; Select Sub-Skill &#8212;</option></select>
+        <label for="l-cat">Innovation Category <span class="req">*</span></label>
+        <select id="l-cat">
+          <option value="">&#8212; Select Category &#8212;</option>
+          ${INNOVATION_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+        </select>
       </div>
       <div class="field hidden" id="l-title-field">
         <label for="l-title">Title of Innovation <span class="req">*</span></label>
@@ -232,6 +227,57 @@ const ZoneForm = (() => {
     </div>
   </div>
 
+  <!-- ── QUIZ & OLYMPIADS TAB ── -->
+  <div id="tab-quiz" class="sf-tab-panel hidden">
+    <div class="form-card">
+      <div class="card-title">Academics / Quiz &amp; Olympiads Participant</div>
+      <div class="field">
+        <label for="ac-school">School Participant is Coming From <span class="req">*</span></label>
+        <select id="ac-school">
+          <option value="">&#8212; Select School &#8212;</option>
+          ${schoolOpts}
+        </select>
+      </div>
+      <div class="field">
+        <label for="ac-name">Full Name <span class="req">*</span></label>
+        <input type="text" id="ac-name" placeholder="Full name of learner">
+      </div>
+      <div class="field">
+        <label for="ac-age">Age <span class="req">*</span></label>
+        <input type="number" id="ac-age" min="3" max="25" placeholder="Age">
+      </div>
+      <div class="field">
+        <label>Sex <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="ac-sex" value="Male"> Male</label>
+          <label class="radio-opt"><input type="radio" name="ac-sex" value="Female"> Female</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="ac-level">Level <span class="req">*</span></label>
+        <select id="ac-level" disabled>
+          <option value="">&#8212; Select School First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="ac-grade">Grade / Form <span class="req">*</span></label>
+        <select id="ac-grade" disabled>
+          <option value="">&#8212; Select Level First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="ac-cat">Quiz / Olympiad Subject <span class="req">*</span></label>
+        <select id="ac-cat" disabled>
+          <option value="">&#8212; Select Level First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="ac-teacher">Supervising Teacher <span class="req">*</span></label>
+        <input type="text" id="ac-teacher" placeholder="Full name of supervising teacher">
+      </div>
+    </div>
+  </div>
+
   <!-- ── TECHNICAL SKILLS TAB ── -->
   <div id="tab-skills" class="sf-tab-panel hidden">
     <div class="form-card">
@@ -331,10 +377,11 @@ const ZoneForm = (() => {
 
     const page = document.getElementById(_pageId);
     page.addEventListener('change', e => {
-      if (e.target.id === 'l-school')       onLearnerSchoolChange();
+      if      (e.target.id === 'l-school')  onLearnerSchoolChange();
       else if (e.target.id === 'l-level')   onLevelChange();
-      else if (e.target.name === 'l-ptype') onPtypeChange();
-      else if (e.target.id === 'l-cat')     onCategoryChange();
+      else if (e.target.id === 'l-cat')     onInnovCatChange();
+      else if (e.target.id === 'ac-school') onAcadSchoolChange();
+      else if (e.target.id === 'ac-level')  onAcadLevelChange();
       else if (e.target.id === 'sk-school') onSkillSchoolChange();
       else if (e.target.id === 'sk-level')  onSkillLevelChange();
       else if (e.target.id === 'sk-cat')    onSkillCatChange();
@@ -348,7 +395,7 @@ const ZoneForm = (() => {
     _activeTab = tab;
     document.querySelectorAll('.sf-tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === tab));
-    ['learner', 'teacher', 'youth', 'skills'].forEach(t =>
+    ['learner', 'teacher', 'youth', 'quiz', 'skills'].forEach(t =>
       document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab));
     validateForm();
     window.scrollTo(0, 0);
@@ -361,6 +408,7 @@ const ZoneForm = (() => {
     ).join('');
   }
 
+  // ── Learner (Innovation) Cascades ────────────────────────────
   function onLearnerSchoolChange() {
     const school = v('l-school');
     const type   = schoolTypeFor(school);
@@ -378,10 +426,8 @@ const ZoneForm = (() => {
     }
     gSel.innerHTML = '<option value="">&#8212; Select Level First &#8212;</option>';
     gSel.disabled  = true;
-    buildPtypeRadios([]);
-    document.getElementById('l-cat').innerHTML      = '<option value="">&#8212; Select Category &#8212;</option>';
-    document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
-    hide('l-cat-field'); hide('l-subskill-field'); hide('l-title-field'); hide('l-report-field');
+    document.getElementById('l-cat').value = '';
+    hide('l-cat-field'); hide('l-title-field'); hide('l-report-field');
   }
 
   function onLevelChange() {
@@ -391,41 +437,52 @@ const ZoneForm = (() => {
     gSel.innerHTML = '<option value="">&#8212; Select Grade / Form &#8212;</option>' +
       grades.map(g => `<option value="${g}">${g}</option>`).join('');
     gSel.disabled = !grades.length;
-
-    buildPtypeRadios(ptypesFor(level));
-    document.getElementById('l-cat').innerHTML      = '<option value="">&#8212; Select Category &#8212;</option>';
-    document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
-    hide('l-cat-field'); hide('l-subskill-field'); hide('l-title-field'); hide('l-report-field');
+    level ? show('l-cat-field') : hide('l-cat-field');
+    document.getElementById('l-cat').value = '';
+    hide('l-title-field'); hide('l-report-field');
   }
 
-  function onPtypeChange() {
-    const ptype = rval('l-ptype');
-    const level = v('l-level');
-    const cats  = catsFor(ptype, level);
-    const sel   = document.getElementById('l-cat');
-    sel.innerHTML = '<option value="">&#8212; Select Category &#8212;</option>' +
-      cats.map(c => `<option value="${c}">${c}</option>`).join('');
-    cats.length ? show('l-cat-field') : hide('l-cat-field');
-    document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
-    hide('l-subskill-field'); hide('l-title-field'); hide('l-report-field');
+  function onInnovCatChange() {
+    const cat = v('l-cat');
+    cat ? show('l-title-field')  : hide('l-title-field');
+    cat ? show('l-report-field') : hide('l-report-field');
   }
 
-  function onCategoryChange() {
-    const ptype = rval('l-ptype');
-    const cat   = v('l-cat');
-    if (ptype === 'Technical Skills' && cat) {
-      const subs = (SKILLS[cat] && SKILLS[cat].subSkills) ? SKILLS[cat].subSkills : [];
-      document.getElementById('l-subskill').innerHTML =
-        '<option value="">&#8212; Select Sub-Skill &#8212;</option>' +
-        subs.map(s => `<option value="${s}">${s}</option>`).join('');
-      show('l-subskill-field');
+  // ── Academics (Quiz) Cascades ─────────────────────────────────
+  function onAcadSchoolChange() {
+    const school = v('ac-school');
+    const type   = schoolTypeFor(school);
+    const levels = LEVELS_BY_SCHOOL_TYPE[type] || [];
+    const lSel   = document.getElementById('ac-level');
+    const gSel   = document.getElementById('ac-grade');
+    const cSel   = document.getElementById('ac-cat');
+
+    if (levels.length) {
+      lSel.innerHTML = '<option value="">&#8212; Select Level &#8212;</option>' +
+        levels.map(l => `<option value="${l}">${l}</option>`).join('');
+      lSel.disabled = false;
     } else {
-      hide('l-subskill-field');
+      lSel.innerHTML = '<option value="">&#8212; Select School First &#8212;</option>';
+      lSel.disabled  = true;
     }
-    const needsDoc = ptype === 'Learner Innovation' ||
-                     (ptype === 'Technical Skills' && cat === 'Cosmetology');
-    needsDoc ? show('l-title-field')  : hide('l-title-field');
-    needsDoc ? show('l-report-field') : hide('l-report-field');
+    gSel.innerHTML = '<option value="">&#8212; Select Level First &#8212;</option>';
+    gSel.disabled  = true;
+    cSel.innerHTML = '<option value="">&#8212; Select Level First &#8212;</option>';
+    cSel.disabled  = true;
+  }
+
+  function onAcadLevelChange() {
+    const level  = v('ac-level');
+    const grades = GRADES_BY_LEVEL[level] || [];
+    const cats   = ACADEMICS_BY_LEVEL[level] || [];
+    const gSel   = document.getElementById('ac-grade');
+    const cSel   = document.getElementById('ac-cat');
+    gSel.innerHTML = '<option value="">&#8212; Select Grade / Form &#8212;</option>' +
+      grades.map(g => `<option value="${g}">${g}</option>`).join('');
+    gSel.disabled = !grades.length;
+    cSel.innerHTML = '<option value="">&#8212; Select Subject &#8212;</option>' +
+      cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    cSel.disabled = !cats.length;
   }
 
   // ── Validation ────────────────────────────────────────────────
@@ -439,8 +496,22 @@ const ZoneForm = (() => {
     if (_activeTab === 'learner') return learnerValid();
     if (_activeTab === 'teacher') return teacherValid();
     if (_activeTab === 'youth')   return youthValid();
+    if (_activeTab === 'quiz')    return academicsValid();
     if (_activeTab === 'skills')  return skillsValid();
     return false;
+  }
+
+  function learnerValid() {
+    return v('l-school') && filled('l-name') && filled('l-age') && rval('l-sex') &&
+           v('l-level') && v('l-grade') && v('l-cat') &&
+           filled('l-title') && hasFile('l-report') &&
+           filled('l-teacher');
+  }
+
+  function academicsValid() {
+    return v('ac-school') && filled('ac-name') && filled('ac-age') && rval('ac-sex') &&
+           v('ac-level') && v('ac-grade') && v('ac-cat') &&
+           filled('ac-teacher');
   }
 
   function skillsValid() {
@@ -449,16 +520,6 @@ const ZoneForm = (() => {
            (!vis('sk-title-field')  || filled('sk-title')) &&
            (!vis('sk-report-field') || hasFile('sk-report')) &&
            filled('sk-teacher');
-  }
-
-  function learnerValid() {
-    return v('l-school') && filled('l-name') && filled('l-age') && rval('l-sex') &&
-           filled('l-grade') && v('l-level') && rval('l-ptype') &&
-           (!vis('l-cat-field')      || v('l-cat'))      &&
-           (!vis('l-subskill-field') || v('l-subskill')) &&
-           (!vis('l-title-field')    || filled('l-title')) &&
-           (!vis('l-report-field')   || hasFile('l-report')) &&
-           filled('l-teacher');
   }
 
   function teacherValid() {
@@ -545,7 +606,7 @@ const ZoneForm = (() => {
     };
     if (_activeTab === 'learner') return { ...base,
       participantType:    'Learner',
-      learnerSubType:     rval('l-ptype'),
+      learnerSubType:     'Learner Innovation',
       participantSchool:  v('l-school'),
       schoolType:         schoolTypeFor(v('l-school')),
       fullName:           v('l-name'),
@@ -554,9 +615,21 @@ const ZoneForm = (() => {
       gradeForm:          v('l-grade'),
       level:              v('l-level'),
       category:           v('l-cat'),
-      subSkill:           v('l-subskill'),
       titleOfInnovation:  v('l-title'),
       supervisingTeacher: v('l-teacher'),
+    };
+    if (_activeTab === 'quiz') return { ...base,
+      participantType:    'Learner',
+      learnerSubType:     'Academics / Quiz & Olympiads',
+      participantSchool:  v('ac-school'),
+      schoolType:         schoolTypeFor(v('ac-school')),
+      fullName:           v('ac-name'),
+      age:                v('ac-age'),
+      sex:                rval('ac-sex'),
+      gradeForm:          v('ac-grade'),
+      level:              v('ac-level'),
+      category:           v('ac-cat'),
+      supervisingTeacher: v('ac-teacher'),
     };
     if (_activeTab === 'teacher') return { ...base,
       participantType:   'Teacher',
@@ -672,16 +745,6 @@ const ZoneForm = (() => {
     cosm ? show('sk-report-field') : hide('sk-report-field');
   }
 
-  function ptypesFor(level) {
-    return ['Learner Innovation', 'Academics / Quiz & Olympiads'];
-  }
-
-  function catsFor(ptype, level) {
-    if (ptype === 'Learner Innovation')           return INNOVATION_CATEGORIES;
-    if (ptype === 'Academics / Quiz & Olympiads') return ACADEMICS_BY_LEVEL[level] || [];
-    if (ptype === 'Technical Skills')             return Object.keys(SKILLS);
-    return [];
-  }
 
   function activeFileInput() {
     if (_activeTab === 'learner' && vis('l-report-field')) return document.getElementById('l-report');
