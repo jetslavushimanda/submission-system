@@ -93,14 +93,16 @@ const SchoolForm = (() => {
         </div>
       </div>
       <div class="field">
-        <label for="l-grade">Grade / Form <span class="req">*</span></label>
-        <input type="text" id="l-grade" placeholder="e.g. Grade 5, Form 2">
-      </div>
-      <div class="field">
         <label for="l-level">Level <span class="req">*</span></label>
         <select id="l-level">
           <option value="">&#8212; Select Level &#8212;</option>
           ${levelsFor(_auth.schoolType).map(l => `<option value="${l}">${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label for="l-grade">Grade / Form <span class="req">*</span></label>
+        <select id="l-grade" disabled>
+          <option value="">&#8212; Select Level First &#8212;</option>
         </select>
       </div>
       <div class="field">
@@ -267,9 +269,14 @@ const SchoolForm = (() => {
   }
 
   function onLevelChange() {
-    const level = v('l-level');
+    const level  = v('l-level');
+    const grades = GRADES_BY_LEVEL[level] || [];
+    const gSel   = document.getElementById('l-grade');
+    gSel.innerHTML = '<option value="">&#8212; Select Grade / Form &#8212;</option>' +
+      grades.map(g => `<option value="${g}">${g}</option>`).join('');
+    gSel.disabled = !grades.length;
+
     buildPtypeRadios(ptypesFor(level));
-    // clear cascade
     document.getElementById('l-cat').innerHTML     = '<option value="">&#8212; Select Category &#8212;</option>';
     document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
     hide('l-cat-field'); hide('l-subskill-field'); hide('l-title-field'); hide('l-report-field');

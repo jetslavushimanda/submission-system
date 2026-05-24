@@ -68,6 +68,13 @@ const ZONES = {
   }
 };
 
+const GRADES_BY_LEVEL = {
+  "ECE":                            ["Baby Class", "Middle Class", "Reception"],
+  "Primary (Grade 1-7)":            ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7"],
+  "Junior Secondary (Form 1-2)":    ["Form 1", "Form 2"],
+  "Senior Secondary (Grade 10-12)": ["Grade 10", "Grade 11", "Grade 12"]
+};
+
 const LEVELS_BY_SCHOOL_TYPE = {
   "Primary School": ["ECE", "Primary (Grade 1-7)"],
   "Open Centre School": ["ECE", "Primary (Grade 1-7)", "Junior Secondary (Form 1-2)"],

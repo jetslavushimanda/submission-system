@@ -89,13 +89,15 @@ const ZoneForm = (() => {
         </div>
       </div>
       <div class="field">
-        <label for="l-grade">Grade / Form <span class="req">*</span></label>
-        <input type="text" id="l-grade" placeholder="e.g. Grade 5, Form 2">
-      </div>
-      <div class="field">
         <label for="l-level">Level <span class="req">*</span></label>
         <select id="l-level" disabled>
           <option value="">&#8212; Select School First &#8212;</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="l-grade">Grade / Form <span class="req">*</span></label>
+        <select id="l-grade" disabled>
+          <option value="">&#8212; Select Level First &#8212;</option>
         </select>
       </div>
       <div class="field">
@@ -280,16 +282,19 @@ const ZoneForm = (() => {
     const school = v('l-school');
     const type   = schoolTypeFor(school);
     const levels = LEVELS_BY_SCHOOL_TYPE[type] || [];
-    const sel    = document.getElementById('l-level');
+    const lSel   = document.getElementById('l-level');
+    const gSel   = document.getElementById('l-grade');
 
     if (levels.length) {
-      sel.innerHTML = '<option value="">&#8212; Select Level &#8212;</option>' +
+      lSel.innerHTML = '<option value="">&#8212; Select Level &#8212;</option>' +
         levels.map(l => `<option value="${l}">${l}</option>`).join('');
-      sel.disabled = false;
+      lSel.disabled = false;
     } else {
-      sel.innerHTML = '<option value="">&#8212; Select School First &#8212;</option>';
-      sel.disabled  = true;
+      lSel.innerHTML = '<option value="">&#8212; Select School First &#8212;</option>';
+      lSel.disabled  = true;
     }
+    gSel.innerHTML = '<option value="">&#8212; Select Level First &#8212;</option>';
+    gSel.disabled  = true;
     buildPtypeRadios([]);
     document.getElementById('l-cat').innerHTML      = '<option value="">&#8212; Select Category &#8212;</option>';
     document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
@@ -297,7 +302,13 @@ const ZoneForm = (() => {
   }
 
   function onLevelChange() {
-    const level = v('l-level');
+    const level  = v('l-level');
+    const grades = GRADES_BY_LEVEL[level] || [];
+    const gSel   = document.getElementById('l-grade');
+    gSel.innerHTML = '<option value="">&#8212; Select Grade / Form &#8212;</option>' +
+      grades.map(g => `<option value="${g}">${g}</option>`).join('');
+    gSel.disabled = !grades.length;
+
     buildPtypeRadios(ptypesFor(level));
     document.getElementById('l-cat').innerHTML      = '<option value="">&#8212; Select Category &#8212;</option>';
     document.getElementById('l-subskill').innerHTML = '<option value="">&#8212; Select Sub-Skill &#8212;</option>';
