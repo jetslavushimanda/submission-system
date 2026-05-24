@@ -12,8 +12,9 @@ let authData    = null;
 
 // ── Boot ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('btn-open-school').addEventListener('click', () => App.startFlow('school'));
-  document.getElementById('btn-open-zone').addEventListener('click',  () => App.startFlow('zone'));
+  document.getElementById('btn-open-school').addEventListener('click',    () => App.startFlow('school'));
+  document.getElementById('btn-open-zone').addEventListener('click',      () => App.startFlow('zone'));
+  document.getElementById('btn-open-dashboard').addEventListener('click', () => App.startFlow('dashboard'));
   document.getElementById('btn-verify').addEventListener('click', App.verifyPhone);
   document.getElementById('landing-phone').addEventListener('keydown', e => {
     if (e.key === 'Enter') App.verifyPhone();
@@ -25,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       authData = JSON.parse(stored);
       if (authData && authData.phone && authData.role) {
-        applyRoleUI(authData.role, authData.organiserName);
+        applyRoleUI(authData.role);
       }
     } catch (_) {
       sessionStorage.removeItem(SESSION_KEY);
@@ -60,20 +61,20 @@ async function verifyPhone() {
     if (data.status === 'found') {
       authData = { phone, ...data };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
-      applyRoleUI(data.role, data.organiserName);
+      applyRoleUI(data.role);
       msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
 
     } else if (data.reason === 'inactive') {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
-      disableAllButtons();
-      msgEl.innerHTML = `<p class="auth-msg-error">${data.message || 'Your registration is pending. Contact the District JETS Organiser: Mwansa Gibson — 0973375828'}</p>`;
+      lockAllButtons();
+      msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact Mwansa Gibson: 0973375828</p>';
 
     } else {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
-      disableAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Your phone number is not registered. Contact the District JETS Organiser: Mwansa Gibson — 0973375828</p>';
+      lockAllButtons();
+      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact Mwansa Gibson: 0973375828</p>';
     }
 
   } catch (_) {
@@ -85,34 +86,51 @@ async function verifyPhone() {
 }
 
 // ── Role UI ───────────────────────────────────────────────────
-function applyRoleUI(role, name) {
+// Enables/disables/shows/hides the three landing buttons based on role.
+// Disabled buttons are truly disabled (not just visually greyed).
+function applyRoleUI(role) {
   const schoolBtn = document.getElementById('btn-open-school');
   const zoneBtn   = document.getElementById('btn-open-zone');
+  const dashBtn   = document.getElementById('btn-open-dashboard');
 
   if (role === 'District') {
-    setBtn(schoolBtn, true);
-    setBtn(zoneBtn,   true);
+    enableBtn(schoolBtn);
+    enableBtn(zoneBtn);
+    dashBtn.classList.remove('hidden');
+    enableBtn(dashBtn);
   } else if (role === 'School') {
-    setBtn(schoolBtn, true);
-    setBtn(zoneBtn,   false);
+    enableBtn(schoolBtn);
+    disableBtn(zoneBtn);
+    dashBtn.classList.add('hidden');
+    disableBtn(dashBtn);
   } else if (role === 'Zone') {
-    setBtn(schoolBtn, false);
-    setBtn(zoneBtn,   true);
+    disableBtn(schoolBtn);
+    enableBtn(zoneBtn);
+    dashBtn.classList.add('hidden');
+    disableBtn(dashBtn);
   } else {
-    setBtn(schoolBtn, false);
-    setBtn(zoneBtn,   false);
+    lockAllButtons();
   }
 }
 
-function setBtn(btn, enabled) {
-  // Visual state only — do NOT set btn.disabled so that clicking a locked
-  // button still routes through startFlow and shows the access-denied message.
-  btn.classList.toggle('btn-disabled', !enabled);
+function enableBtn(btn) {
+  btn.disabled = false;
+  btn.classList.remove('btn-disabled');
 }
 
-function disableAllButtons() {
-  setBtn(document.getElementById('btn-open-school'), false);
-  setBtn(document.getElementById('btn-open-zone'),   false);
+function disableBtn(btn) {
+  btn.disabled = true;
+  btn.classList.add('btn-disabled');
+}
+
+function lockAllButtons() {
+  const schoolBtn = document.getElementById('btn-open-school');
+  const zoneBtn   = document.getElementById('btn-open-zone');
+  const dashBtn   = document.getElementById('btn-open-dashboard');
+  disableBtn(schoolBtn);
+  disableBtn(zoneBtn);
+  dashBtn.classList.add('hidden');
+  disableBtn(dashBtn);
 }
 
 function roleLabel(role) {
@@ -133,46 +151,52 @@ function startFlow(mode) {
 
   const role = authData.role;
 
-  // Defensive role check (catches any bypass attempt)
+  // Backend-mirrored role check — blocks any client-side bypass attempt.
   if (mode === 'school' && role !== 'School' && role !== 'District') {
-    showAccessDenied('school');
-    return;
+    showAccessDenied('school'); return;
   }
   if (mode === 'zone' && role !== 'Zone' && role !== 'District') {
-    showAccessDenied('zone');
-    return;
+    showAccessDenied('zone'); return;
+  }
+  if (mode === 'dashboard' && role !== 'District') {
+    showAccessDenied('dashboard'); return;
   }
 
   currentMode = mode;
-  const pageId = mode === 'school' ? 'page-school' : 'page-zone';
-  showPage(pageId);
 
   if (mode === 'school') {
-    SchoolForm.render(pageId, authData);
-  } else {
-    ZoneForm.render(pageId, authData);
+    showPage('page-school');
+    SchoolForm.render('page-school', authData);
+  } else if (mode === 'zone') {
+    showPage('page-zone');
+    ZoneForm.render('page-zone', authData);
+  } else if (mode === 'dashboard') {
+    showPage('page-dashboard');
+    Dashboard.render('page-dashboard', authData);
   }
 }
 
 function showAccessDenied(attemptedMode) {
-  const pageId    = attemptedMode === 'school' ? 'page-school' : 'page-zone';
-  const modeLabel = attemptedMode === 'school' ? 'School Submission' : 'Zone Submission';
-  const role      = authData ? authData.role : '';
+  const pageMap  = { school: 'page-school', zone: 'page-zone', dashboard: 'page-dashboard' };
+  const labelMap = { school: 'School Submission', zone: 'Zone Submission', dashboard: 'District Dashboard' };
+  const pageId   = pageMap[attemptedMode];
+  const label    = labelMap[attemptedMode];
+  const role     = authData ? authData.role : '';
 
   let msg;
   if (role === 'School') {
-    msg = 'Access Denied. You are registered as a School JETS Organiser. You can only access the School Submission Form.';
+    msg = 'Unauthorized. Access denied. You are registered as a School JETS Organiser and may only access the School Submission form.';
   } else if (role === 'Zone') {
-    msg = 'Access Denied. You are registered as a Zonal JETS Coordinator. You can only access the Zone Submission Form.';
+    msg = 'Unauthorized. Access denied. You are registered as a Zonal JETS Coordinator and may only access the Zone Submission form.';
   } else {
-    msg = 'Access Denied. You are not authorised to access this form.';
+    msg = 'Unauthorized. Access denied.';
   }
 
   showPage(pageId);
   setPageHTML(pageId, `
     <div class="form-topbar">
       <button class="btn-back" onclick="App.backToLanding()">&#8592; Back</button>
-      <span class="topbar-title">${modeLabel}</span>
+      <span class="topbar-title">${label}</span>
     </div>
     <div class="auth-status-wrap">
       <div class="auth-status-card">
@@ -181,6 +205,7 @@ function showAccessDenied(attemptedMode) {
       </div>
     </div>`);
 }
+
 
 // ── Navigation ────────────────────────────────────────────────
 function showPage(pageId) {
@@ -194,6 +219,7 @@ function setPageHTML(pageId, html) {
 }
 
 function backToLanding() {
+  if (typeof Dashboard !== 'undefined') Dashboard.destroy();
   currentMode = null;
   showPage('page-landing');
 }
@@ -201,7 +227,7 @@ function backToLanding() {
 function signOut() {
   sessionStorage.removeItem(SESSION_KEY);
   authData = null;
-  disableAllButtons();
+  lockAllButtons();
   document.getElementById('landing-phone').value = '';
   document.getElementById('landing-auth-msg').innerHTML = '';
   backToLanding();

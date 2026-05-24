@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="css/school.css" />
   <link rel="stylesheet" href="css/zone.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
 
 </head>
 <body>
@@ -61,15 +62,20 @@
         <div id="landing-auth-msg"></div>
       </div>
 
-      <!-- Form buttons — enabled/disabled based on role after verification -->
-      <button class="btn-submit btn-school-submit btn-disabled" id="btn-open-school">
+      <!-- Form buttons — enabled/disabled/hidden based on role after verification -->
+      <button class="btn-submit btn-school-submit btn-disabled" id="btn-open-school" disabled>
         <span class="btn-title">SCHOOL SUBMISSION</span>
         <span class="btn-role">School JETS Organiser</span>
       </button>
 
-      <button class="btn-submit btn-zone-submit btn-disabled" id="btn-open-zone">
+      <button class="btn-submit btn-zone-submit btn-disabled" id="btn-open-zone" disabled>
         <span class="btn-title">ZONE SUBMISSION</span>
         <span class="btn-role">Zonal JETS Coordinator</span>
+      </button>
+
+      <button class="btn-submit btn-dashboard-submit hidden" id="btn-open-dashboard" disabled>
+        <span class="btn-title">&#128202; DISTRICT DASHBOARD</span>
+        <span class="btn-role">DEC Members &mdash; District Role Only</span>
       </button>
 
     </main>
@@ -94,11 +100,18 @@
   </div>
 
 
+  <!-- ═══════════════════════════ DASHBOARD PAGE ═══════════════════════════ -->
+  <div id="page-dashboard" class="page">
+    <!-- Rendered by js/app.js showDashboard() -->
+  </div>
+
+
   <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════════ -->
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
   <script src="js/school-form.js"></script>
   <script src="js/zone-form.js"></script>
+  <script src="js/dashboard.js"></script>
 
 </body>
 </html>

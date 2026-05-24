@@ -37,7 +37,7 @@ const ZONES = {
       { name: "Nsansha Primary", type: "Primary School" },
       { name: "Mpomfu Primary", type: "Primary School" },
       { name: "Chito Primary", type: "Primary School" },
-      { name: "Lukulu Secondary", type: "Secondary School" }
+      { name: "Lukulu Day Secondary", type: "Secondary School" }
     ]
   },
   "Kalonje": {
@@ -69,18 +69,17 @@ const ZONES = {
 };
 
 const GRADES_BY_LEVEL = {
-  "ECE":                            ["Baby Class", "Middle Class", "Reception"],
-  "Primary (Grade 1-7)":            ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7"],
-  "Junior Secondary (Form 1-2)":    ["Form 1", "Form 2"],
-  "Senior Secondary (Grade 10-12)": ["Grade 10", "Grade 11", "Grade 12"]
+  "ECE & Primary":    ["Level 1", "Level 2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7"],
+  "Junior Secondary": ["Form 1", "Form 2"],
+  "Senior Secondary": ["Grade 10", "Grade 11", "Grade 12"]
 };
 
 const LEVELS_BY_SCHOOL_TYPE = {
-  "Primary School": ["ECE", "Primary (Grade 1-7)"],
-  "Open Centre School": ["ECE", "Primary (Grade 1-7)", "Junior Secondary (Form 1-2)"],
-  "Secondary School": ["Junior Secondary (Form 1-2)", "Senior Secondary (Grade 10-12)"],
-  "Private School": ["ECE", "Primary (Grade 1-7)", "Junior Secondary (Form 1-2)", "Senior Secondary (Grade 10-12)"],
-  "Community School": ["ECE", "Primary (Grade 1-7)"]
+  "Primary School":     ["ECE & Primary"],
+  "Open Centre School": ["ECE & Primary", "Junior Secondary"],
+  "Secondary School":   ["Junior Secondary", "Senior Secondary"],
+  "Private School":     ["ECE & Primary", "Junior Secondary", "Senior Secondary"],
+  "Community School":   ["ECE & Primary"]
 };
 
 const INNOVATION_CATEGORIES = [
@@ -96,10 +95,9 @@ const INNOVATION_CATEGORIES = [
 ];
 
 const ACADEMICS_BY_LEVEL = {
-  "ECE": ["Quiz & Olympiads - Mathematics", "Quiz & Olympiads - Science", "Quiz & Olympiads - CTS"],
-  "Primary (Grade 1-7)": ["Quiz & Olympiads - Mathematics", "Quiz & Olympiads - Science", "Quiz & Olympiads - CTS"],
-  "Junior Secondary (Form 1-2)": ["Quiz & Olympiads - Physics/Mathematics", "Quiz & Olympiads - Biology/Chemistry"],
-  "Senior Secondary (Grade 10-12)": ["Quiz & Olympiads - Physics/Mathematics", "Quiz & Olympiads - Biology/Chemistry"]
+  "ECE & Primary":    ["Quiz & Olympiads — Mathematics", "Quiz & Olympiads — Science", "Quiz & Olympiads — CTS"],
+  "Junior Secondary": ["Quiz & Olympiads — Physics/Mathematics", "Quiz & Olympiads — Biology/Chemistry"],
+  "Senior Secondary": ["Quiz & Olympiads — Physics/Mathematics", "Quiz & Olympiads — Biology/Chemistry"]
 };
 
 const SKILLS = {

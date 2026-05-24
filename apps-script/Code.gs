@@ -79,27 +79,45 @@ function doPost(e) {
       }
 
     } else if (action === "submitSchool") {
-      // Verify role before accepting — backend enforcement of access control.
       var authCheck = checkRegistration(payload.phone);
-      if (!authCheck.found) {
-        result = { status: 'error', message: 'Access denied. Phone number not registered.' };
-      } else if (authCheck.role !== 'School' && authCheck.role !== 'District') {
-        result = { status: 'error', message: 'Access Denied. You are not authorised to submit School forms.' };
+      if (!authCheck.found || (authCheck.role !== 'School' && authCheck.role !== 'District')) {
+        result = { status: 'error', message: 'Unauthorized. Access denied.' };
       } else {
         result = submitSchoolParticipant(payload);
         if (result.status === 'ok') updateDashboard_();
       }
 
     } else if (action === "submitZone") {
-      // Verify role before accepting — backend enforcement of access control.
       var authCheck = checkRegistration(payload.phone);
-      if (!authCheck.found) {
-        result = { status: 'error', message: 'Access denied. Phone number not registered.' };
-      } else if (authCheck.role !== 'Zone' && authCheck.role !== 'District') {
-        result = { status: 'error', message: 'Access Denied. You are not authorised to submit Zone forms.' };
+      if (!authCheck.found || (authCheck.role !== 'Zone' && authCheck.role !== 'District')) {
+        result = { status: 'error', message: 'Unauthorized. Access denied.' };
       } else {
         result = submitZoneParticipant(payload);
         if (result.status === 'ok') updateDashboard_();
+      }
+
+    } else if (action === "getDashboard") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. Access denied.' };
+      } else {
+        result = getDashboardData_();
+      }
+
+    } else if (action === "getFullDashboard") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. Access denied.' };
+      } else {
+        result = getFullDashboard_();
+      }
+
+    } else if (action === "getRecentFeed") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. Access denied.' };
+      } else {
+        result = getRecentFeed_();
       }
 
     } else if (action === "getCount") {
@@ -107,6 +125,12 @@ function doPost(e) {
 
     } else if (action === "getZoneCount") {
       result = getZoneCount(payload);
+
+    } else if (action === "getSkillCounts") {
+      result = getSkillCounts(payload);
+
+    } else if (action === "getZoneSkillCounts") {
+      result = getZoneSkillCounts(payload);
 
     } else {
       result = { status: "error", message: "Unknown action: " + action };
@@ -162,6 +186,58 @@ function getZoneCount(payload) {
     if (trim_(zones[i][0]) === zoneName) count++;
   }
   return { count: count };
+}
+
+// ── getSkillCounts ────────────────────────────────────────────
+// Returns per-category Technical Skills submission counts for one school.
+// Tab 2 col H = Participant Type ("Learner — Technical Skills"), col N = Category.
+function getSkillCounts(payload) {
+  var schoolName = trim_(payload.schoolName);
+  if (!schoolName) return { status: 'ok', counts: {} };
+
+  var sheet = openSheet_(TAB_SCHOOL_SUB);
+  if (!sheet) return { status: 'ok', counts: {} };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'ok', counts: {} };
+
+  var data = sheet.getRange(2, 4, lastRow - 1, 11).getValues(); // cols D..N
+  var counts = {};
+  for (var i = 0; i < data.length; i++) {
+    var school = trim_(data[i][0]);       // col D
+    var pType  = (data[i][4] || '').toString(); // col H
+    var cat    = (data[i][10] || '').toString().trim(); // col N
+    if (school === schoolName && pType.indexOf('Technical Skills') !== -1 && cat) {
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+  }
+  return { status: 'ok', counts: counts };
+}
+
+// ── getZoneSkillCounts ────────────────────────────────────────
+// Returns per-category Technical Skills submission counts for one zone.
+// Tab 3 col C = Zone, col H = Participant Type, col N = Category.
+function getZoneSkillCounts(payload) {
+  var zoneName = trim_(payload.zone);
+  if (!zoneName) return { status: 'ok', counts: {} };
+
+  var sheet = openSheet_(TAB_ZONE_SUB);
+  if (!sheet) return { status: 'ok', counts: {} };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'ok', counts: {} };
+
+  var data = sheet.getRange(2, 3, lastRow - 1, 12).getValues(); // cols C..N
+  var counts = {};
+  for (var i = 0; i < data.length; i++) {
+    var zone  = trim_(data[i][0]);        // col C
+    var pType = (data[i][5] || '').toString(); // col H
+    var cat   = (data[i][11] || '').toString().trim(); // col N
+    if (zone === zoneName && pType.indexOf('Technical Skills') !== -1 && cat) {
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+  }
+  return { status: 'ok', counts: counts };
 }
 
 // ── Drive file upload ─────────────────────────────────────────
@@ -558,6 +634,29 @@ function reloadSchoolData() {
 
   Logger.log('School data reloaded — ' + schoolRows.length + ' rows written.');
   Logger.log('Sheet URL: ' + ss.getUrl());
+}
+
+// ── getDashboardData_ ─────────────────────────────────────────
+// Returns zone-level submission counts from Tab 4 (District Dashboard).
+// Tab 4 is formula-driven; getValues() returns computed results.
+function getDashboardData_() {
+  var dash = openSheet_(TAB_DASHBOARD);
+  if (!dash) return { status: 'error', message: 'Dashboard tab not found.' };
+  var lastRow = dash.getLastRow();
+  if (lastRow < 2) return { status: 'ok', rows: [] };
+  var data = dash.getRange(2, 1, lastRow - 1, 4).getValues();
+  var rows = [];
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0]) {
+      rows.push({
+        zone:    data[i][0].toString(),
+        school:  data[i][1] || 0,
+        zone_sub: data[i][2] || 0,
+        total:   data[i][3] || 0,
+      });
+    }
+  }
+  return { status: 'ok', rows: rows };
 }
 
 // ── Internal helpers ──────────────────────────────────────────

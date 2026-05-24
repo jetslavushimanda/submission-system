@@ -147,18 +147,16 @@ function buildDashboard() {
     var cr  = 'A' + r;
 
     var fPrimary =
-      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"ECE")' +
-      '+COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"Primary (Grade 1-7)")' +
-      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"ECE")' +
-      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"Primary (Grade 1-7)")';
+      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"ECE & Primary")' +
+      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"ECE & Primary")';
 
     var fJunior =
-      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"Junior Secondary (Form 1-2)")' +
-      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"Junior Secondary (Form 1-2)")';
+      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"Junior Secondary")' +
+      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"Junior Secondary")';
 
     var fSenior =
-      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"Senior Secondary (Grade 10-12)")' +
-      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"Senior Secondary (Grade 10-12)")';
+      '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!I:I,"Senior Secondary")' +
+      '+COUNTIFS(' + ZC + '!N:N,' + cr + ',' + ZC + '!I:I,"Senior Secondary")';
 
     var fTeacher =
       '=COUNTIFS(' + SC + '!N:N,' + cr + ',' + SC + '!H:H,"Teacher")' +
@@ -359,4 +357,254 @@ function dbTotalsRow_(sheet, row, values, cols) {
     }
   }
   sheet.setRowHeight(row, 24);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// getFullDashboard_ — JSON payload for the frontend District Dashboard.
+// Called by Code.gs doPost when action === 'getFullDashboard'.
+// ═══════════════════════════════════════════════════════════════
+function getFullDashboard_() {
+  var tz = Session.getScriptTimeZone();
+  var todayStr = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+
+  var ss   = SpreadsheetApp.openById(SHEET_ID);
+  var tab1 = ss.getSheetByName(TAB_REGISTERED);
+  var tab2 = ss.getSheetByName(TAB_SCHOOL_SUB);
+  var tab3 = ss.getSheetByName(TAB_ZONE_SUB);
+
+  // ── Tab 1: registries ──────────────────────────────────────
+  var reg = (tab1 && tab1.getLastRow() > 1)
+    ? tab1.getRange(2, 1, tab1.getLastRow() - 1, 7).getValues() : [];
+
+  var schoolReg  = {};  // schoolName → {zone,type,status}
+  var coordReg   = {};  // zone → {name,phone}
+
+  for (var i = 0; i < reg.length; i++) {
+    var rZone = (reg[i][0] || '').toString().trim();
+    var rName = (reg[i][1] || '').toString().trim();
+    var rType = (reg[i][2] || '').toString().trim();
+    var rOrg  = (reg[i][3] || '').toString().trim();
+    var rPh   = (reg[i][4] || '').toString().trim();
+    var rRole = (reg[i][5] || '').toString().trim();
+    var rStat = (reg[i][6] || '').toString().trim();
+    if (rRole === 'School') {
+      schoolReg[rName] = { zone: rZone, type: rType, status: rStat };
+    } else if (rRole === 'Zone') {
+      coordReg[rZone] = { name: rOrg, phone: rPh };
+    }
+  }
+
+  // ── Tab 2 & 3: raw rows ────────────────────────────────────
+  var s2 = (tab2 && tab2.getLastRow() > 1)
+    ? tab2.getRange(2, 1, tab2.getLastRow() - 1, 19).getValues() : [];
+  var s3 = (tab3 && tab3.getLastRow() > 1)
+    ? tab3.getRange(2, 1, tab3.getLastRow() - 1, 19).getValues() : [];
+
+  // ── Overview ───────────────────────────────────────────────
+  var totalSubmissions = s2.length + s3.length;
+  var todayCount = 0;
+  var schoolSubCounts = {};   // schoolName → count (Tab 2)
+  var schoolsStarted  = {};   // schoolName → true (any submission)
+
+  for (var i = 0; i < s2.length; i++) {
+    var ts  = s2[i][0];
+    var sch = (s2[i][3] || '').toString().trim();
+    if (ts) {
+      if (Utilities.formatDate(new Date(ts), tz, 'yyyy-MM-dd') === todayStr) todayCount++;
+    }
+    if (sch) { schoolSubCounts[sch] = (schoolSubCounts[sch] || 0) + 1; schoolsStarted[sch] = true; }
+  }
+  for (var i = 0; i < s3.length; i++) {
+    var ts = s3[i][0];
+    if (ts && Utilities.formatDate(new Date(ts), tz, 'yyyy-MM-dd') === todayStr) todayCount++;
+  }
+
+  var regNames = Object.keys(schoolReg);
+  var schoolsTotal     = regNames.length;
+  var schoolsSubmitted = 0;
+  for (var i = 0; i < regNames.length; i++) { if (schoolsStarted[regNames[i]]) schoolsSubmitted++; }
+
+  // ── Zone progress ──────────────────────────────────────────
+  var ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
+  var zoneSubMap = {};
+  for (var z = 0; z < ZONE_NAMES.length; z++) { zoneSubMap[ZONE_NAMES[z]] = { cnt: 0, schools: {} }; }
+
+  for (var i = 0; i < s3.length; i++) {
+    var zn  = (s3[i][2] || '').toString().trim();
+    var sch = (s3[i][5] || '').toString().trim();
+    if (zoneSubMap[zn]) {
+      zoneSubMap[zn].cnt++;
+      if (sch) zoneSubMap[zn].schools[sch] = (zoneSubMap[zn].schools[sch] || 0) + 1;
+    }
+  }
+
+  var zones = [];
+  for (var z = 0; z < ZONE_NAMES.length; z++) {
+    var zn   = ZONE_NAMES[z];
+    var zd   = zoneSubMap[zn];
+    var coord = coordReg[zn] || { name: '', phone: '' };
+    var submitted = zd.cnt;
+    var pct    = Math.min(100, Math.round((submitted / 64) * 100));
+    var status = submitted === 0 ? 'Not Started' : (submitted >= 64 ? 'Complete' : 'In Progress');
+
+    // schools list for this zone
+    var zSchools = {};
+    var zsKeys = Object.keys(zd.schools);
+    for (var k = 0; k < zsKeys.length; k++) {
+      zSchools[zsKeys[k]] = { zoneCount: zd.schools[zsKeys[k]], schoolCount: schoolSubCounts[zsKeys[k]] || 0 };
+    }
+    for (var i = 0; i < regNames.length; i++) {
+      var sn = regNames[i];
+      if (schoolReg[sn].zone === zn && !zSchools[sn]) {
+        zSchools[sn] = { zoneCount: 0, schoolCount: schoolSubCounts[sn] || 0 };
+      }
+    }
+    var schoolsArr = [];
+    var snKeys = Object.keys(zSchools);
+    for (var k = 0; k < snKeys.length; k++) {
+      var sn  = snKeys[k];
+      var inf = schoolReg[sn] || { type: '' };
+      var sc  = zSchools[sn].schoolCount;
+      var zc  = zSchools[sn].zoneCount;
+      schoolsArr.push({ name: sn, type: inf.type || '', schoolCount: sc, zoneCount: zc, submitted: sc + zc });
+    }
+    schoolsArr.sort(function(a, b) { return a.name < b.name ? -1 : 1; });
+
+    zones.push({ name: zn, coordinator: coord.name, phone: coord.phone,
+                 submitted: submitted, max: 64, pct: pct, status: status, schools: schoolsArr });
+  }
+
+  // ── School list ────────────────────────────────────────────
+  var schoolList = [];
+  for (var i = 0; i < regNames.length; i++) {
+    var sn   = regNames[i];
+    var info = schoolReg[sn];
+    var sc   = schoolSubCounts[sn] || 0;
+    schoolList.push({ name: sn, zone: info.zone, type: info.type,
+                      submitted: sc, hasStarted: sc > 0 });
+  }
+  schoolList.sort(function(a, b) {
+    return a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : a.name < b.name ? -1 : 1;
+  });
+
+  // ── All submissions (for school detail expand) ─────────────
+  var allSubs = [];
+  for (var i = 0; i < s2.length; i++) {
+    var ts = s2[i][0];
+    allSubs.push({
+      time:        ts ? new Date(ts).toISOString() : '',
+      source:      'School',
+      zone:        (s2[i][2]  || '').toString().trim(),
+      school:      (s2[i][3]  || '').toString().trim(),
+      participant: (s2[i][9]  || '').toString().trim(),
+      type:        (s2[i][7]  || '').toString().trim(),
+      category:    (s2[i][13] || '').toString().trim(),
+      ref:         (s2[i][1]  || '').toString().trim()
+    });
+  }
+  for (var i = 0; i < s3.length; i++) {
+    var ts = s3[i][0];
+    allSubs.push({
+      time:        ts ? new Date(ts).toISOString() : '',
+      source:      'Zone',
+      zone:        (s3[i][2]  || '').toString().trim(),
+      school:      (s3[i][5]  || '').toString().trim(),
+      participant: (s3[i][9]  || '').toString().trim(),
+      type:        (s3[i][7]  || '').toString().trim(),
+      category:    (s3[i][13] || '').toString().trim(),
+      ref:         (s3[i][1]  || '').toString().trim()
+    });
+  }
+  allSubs.sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
+
+  // ── Category coverage ──────────────────────────────────────
+  var coverage = {};
+  for (var z = 0; z < ZONE_NAMES.length; z++) coverage[ZONE_NAMES[z]] = {};
+  for (var i = 0; i < allSubs.length; i++) {
+    var zn  = allSubs[i].zone;
+    var cat = allSubs[i].category;
+    if (zn && cat && coverage[zn] !== undefined) {
+      coverage[zn][cat] = (coverage[zn][cat] || 0) + 1;
+    }
+  }
+
+  // ── Skills tracker ─────────────────────────────────────────
+  var SKILL_CATS  = ['Civil Engineering', 'Mechanical Engineering', 'Electronics Services', 'Fashion Technology', 'Cosmetology'];
+  var SKILL_SLOTS = { 'Civil Engineering': 4, 'Mechanical Engineering': 4, 'Electronics Services': 2, 'Fashion Technology': 1, 'Cosmetology': 1 };
+  var skillCounts = {};
+  for (var i = 0; i < SKILL_CATS.length; i++) skillCounts[SKILL_CATS[i]] = 0;
+  for (var i = 0; i < allSubs.length; i++) {
+    var cat = allSubs[i].category;
+    if (allSubs[i].type.indexOf('Technical Skills') !== -1 && cat && skillCounts[cat] !== undefined) skillCounts[cat]++;
+  }
+  var skills = [];
+  for (var i = 0; i < SKILL_CATS.length; i++) {
+    var c = SKILL_CATS[i];
+    skills.push({ category: c, used: skillCounts[c], slots: SKILL_SLOTS[c] });
+  }
+
+  // ── Export / Drive URLs ────────────────────────────────────
+  var driveUrl  = DRIVE_FOLDER_ID ? 'https://drive.google.com/drive/folders/' + DRIVE_FOLDER_ID : '';
+  var exportUrl = SHEET_ID ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx' : '';
+  var exportS2Gid = tab2 ? tab2.getSheetId() : '';
+  var exportS3Gid = tab3 ? tab3.getSheetId() : '';
+  var exportSchoolUrl = SHEET_ID && exportS2Gid !== ''
+    ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx&gid=' + exportS2Gid : exportUrl;
+  var exportZoneUrl   = SHEET_ID && exportS3Gid !== ''
+    ? 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=xlsx&gid=' + exportS3Gid : exportUrl;
+
+  return {
+    status:   'ok',
+    cachedAt: new Date().toISOString(),
+    overview: {
+      totalSubmissions:  totalSubmissions,
+      schoolsSubmitted:  schoolsSubmitted,
+      schoolsTotal:      schoolsTotal,
+      schoolsNotStarted: Math.max(0, schoolsTotal - schoolsSubmitted),
+      todaySubmissions:  todayCount
+    },
+    zones:      zones,
+    schoolList: schoolList,
+    recentFeed: allSubs.slice(0, 20),
+    allSubs:    allSubs,
+    coverage:   coverage,
+    skills:     skills,
+    driveUrl:   driveUrl,
+    exportUrl:       exportUrl,
+    exportSchoolUrl: exportSchoolUrl,
+    exportZoneUrl:   exportZoneUrl
+  };
+}
+
+// ── getRecentFeed_ — lightweight 60-second feed refresh ───────
+function getRecentFeed_() {
+  var tab2 = openSheet_(TAB_SCHOOL_SUB);
+  var tab3 = openSheet_(TAB_ZONE_SUB);
+  var feed = [];
+
+  function readRows(sheet, schoolIdx, isZone) {
+    if (!sheet || sheet.getLastRow() < 2) return;
+    var last  = sheet.getLastRow();
+    var start = Math.max(2, last - 100);
+    var data  = sheet.getRange(start, 1, last - start + 1, 14).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var ts = data[i][0];
+      if (!ts) continue;
+      feed.push({
+        time:        new Date(ts).toISOString(),
+        source:      isZone ? 'Zone' : 'School',
+        zone:        (data[i][2] || '').toString().trim(),
+        school:      (data[i][schoolIdx] || '').toString().trim(),
+        participant: (data[i][9] || '').toString().trim(),
+        type:        (data[i][7] || '').toString().trim(),
+        category:    (data[i][13] || '').toString().trim(),
+        ref:         (data[i][1] || '').toString().trim()
+      });
+    }
+  }
+
+  readRows(tab2, 3, false);
+  readRows(tab3, 5, true);
+  feed.sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
+  return { status: 'ok', recentFeed: feed.slice(0, 20) };
 }
