@@ -31,15 +31,16 @@ function normalizePhone_(p) {
 }
 
 // ── checkRegistration ─────────────────────────────────────────
-// Searches column E (Phone) for a matching phone number.
+// Searches column E (Phone) for ALL rows matching the phone number.
+//
+// Handles the dual-role case: a person registered as both a School
+// JETS Organiser and a Zonal Coordinator (same phone, two rows)
+// receives combined access — equivalent to District.
 //
 // Returns one of:
 //   { found: true,  zone, schoolName, schoolType, organiserName, phone, role }
 //   { found: false, reason: "inactive", message: "..." }
 //   { found: false }
-//
-// Called by Code.gs which translates this into the status-based
-// shape that app.js expects before sending to the client.
 function checkRegistration(phone) {
   if (!phone) return { found: false };
 
@@ -56,33 +57,63 @@ function checkRegistration(phone) {
   var rows = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
   Logger.log('Total rows read: ' + rows.length);
 
+  // Collect every row whose phone matches
+  var allMatches = [];
   for (var i = 0; i < rows.length; i++) {
-    var row      = rows[i];
-    var rowPhone = normalizePhone_(row[COL_PHONE]);
-
-    if (rowPhone !== phoneNorm) continue;
-
-    // Phone matched — check Status before returning any data
-    var status = row[COL_STATUS].toString().trim();
-
-    if (status !== 'Active') {
-      return {
-        found:   false,
-        reason:  'inactive',
-        message: 'Your registration is pending. Contact the District JETS Organiser: Mwansa Gibson — 0973375828',
-      };
+    if (normalizePhone_(rows[i][COL_PHONE]) === phoneNorm) {
+      allMatches.push(rows[i]);
     }
+  }
 
+  if (allMatches.length === 0) return { found: false };
+
+  // Only Active rows count; if all matches are Inactive → pending message
+  var activeMatches = [];
+  for (var j = 0; j < allMatches.length; j++) {
+    if (allMatches[j][COL_STATUS].toString().trim() === 'Active') {
+      activeMatches.push(allMatches[j]);
+    }
+  }
+
+  if (activeMatches.length === 0) {
     return {
-      found:         true,
-      zone:          row[COL_ZONE],
-      schoolName:    row[COL_SCHOOL],
-      schoolType:    row[COL_TYPE],
-      organiserName: row[COL_NAME],
-      phone:         rowPhone,
-      role:          row[COL_ROLE].toString().trim(),
+      found:   false,
+      reason:  'inactive',
+      message: 'Your registration is pending. Contact the District JETS Organiser: Mwansa Gibson — 0973375828',
     };
   }
 
-  return { found: false };
+  // Merge roles from all active rows for this phone number.
+  // School + Zone together grants access to both forms (same as District).
+  var hasDistrict = false, hasSchool = false, hasZone = false;
+  for (var k = 0; k < activeMatches.length; k++) {
+    var r = activeMatches[k][COL_ROLE].toString().trim();
+    if (r === 'District') hasDistrict = true;
+    if (r === 'School')   hasSchool   = true;
+    if (r === 'Zone')     hasZone     = true;
+  }
+
+  var effectiveRole;
+  if (hasDistrict || (hasSchool && hasZone)) {
+    effectiveRole = 'District';
+  } else if (hasSchool) {
+    effectiveRole = 'School';
+  } else if (hasZone) {
+    effectiveRole = 'Zone';
+  } else {
+    effectiveRole = activeMatches[0][COL_ROLE].toString().trim();
+  }
+
+  Logger.log('Effective role: ' + effectiveRole + ' (' + activeMatches.length + ' active row(s))');
+
+  var primary = activeMatches[0];
+  return {
+    found:         true,
+    zone:          primary[COL_ZONE],
+    schoolName:    primary[COL_SCHOOL],
+    schoolType:    primary[COL_TYPE],
+    organiserName: primary[COL_NAME],
+    phone:         phoneNorm,
+    role:          effectiveRole,
+  };
 }

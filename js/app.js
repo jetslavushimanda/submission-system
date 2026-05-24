@@ -105,7 +105,8 @@ function applyRoleUI(role, name) {
 }
 
 function setBtn(btn, enabled) {
-  btn.disabled = !enabled;
+  // Visual state only — do NOT set btn.disabled so that clicking a locked
+  // button still routes through startFlow and shows the access-denied message.
   btn.classList.toggle('btn-disabled', !enabled);
 }
 
