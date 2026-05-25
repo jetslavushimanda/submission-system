@@ -951,35 +951,25 @@ const SchoolForm = (() => {
 
     try {
       if (fileDataInMemory.base64) {
-        payload.reportFileBase64 = fileDataInMemory.base64;
-        payload.reportFileName   = fileDataInMemory.name;
-        payload.reportFileType   = fileDataInMemory.type;
+        btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
+        const fileRes = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action:   'uploadFile',
+            phone:    _auth.phone,
+            base64:   fileDataInMemory.base64,
+            fileName: fileDataInMemory.name,
+            mimeType: fileDataInMemory.type
+          }),
+        });
+        if (!fileRes.ok) throw new Error('Report upload failed: ' + fileRes.status);
+        const fileData = await fileRes.json();
+        if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
+        payload.fileUrl = fileData.url;
       }
 
-      const res2 = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'submitSchool', ...payload }),
-      });
-      if (!res2.ok) throw new Error('Server error (' + res2.status + ').');
-      const data = await res2.json();
-
-      if (data.status === 'duplicate') {
-        showDuplicateWarningBanner({ ...payload, refNumber: data.refNumber });
-        _submitting = false;
-        btn.disabled = false;
-        btn.innerHTML = 'SUBMIT PARTICIPANT';
-        return;
-      }
-
-      if (data.status === 'full') {
-        // Refresh quotas
-        fetchExistingSubmissions();
-        alert('This slot has already filled up. Submission aborted.');
-        _submitting = false;
-        btn.disabled = false;
-        btn.innerHTML = 'SUBMIT PARTICIPANT';
-        return;
-      }
+      btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
+      const data = await FirestoreDB.submitSchool(payload);
 
       if (data.status !== 'ok') throw new Error(data.message || 'Submission failed.');
 

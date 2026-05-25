@@ -150,9 +150,15 @@ const FirestoreDB = (() => {
   // ── Add a school submission ───────────────────────────────────
   async function submitSchool(payload) {
     try {
+      const tsMs = Date.now();
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const refNumber = 'SCH-' + tsMs + '-' + rand;
+
       payload.timestamp = new Date().toISOString();
-      const ref = await db.collection(COL_SCHOOL_SUBS).add(payload);
-      return { status: 'ok', ref: ref.id };
+      payload.ref = refNumber;
+
+      await db.collection(COL_SCHOOL_SUBS).doc(refNumber).set(payload);
+      return { status: 'ok', refNumber: refNumber };
     } catch (e) {
       console.error('submitSchool failed', e);
       throw e;
@@ -162,9 +168,15 @@ const FirestoreDB = (() => {
   // ── Add a zone submission ─────────────────────────────────────
   async function submitZone(payload) {
     try {
+      const tsMs = Date.now();
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const refNumber = 'ZN-' + tsMs + '-' + rand;
+
       payload.timestamp = new Date().toISOString();
-      const ref = await db.collection(COL_ZONE_SUBS).add(payload);
-      return { status: 'ok', ref: ref.id };
+      payload.ref = refNumber;
+
+      await db.collection(COL_ZONE_SUBS).doc(refNumber).set(payload);
+      return { status: 'ok', refNumber: refNumber };
     } catch (e) {
       console.error('submitZone failed', e);
       throw e;
@@ -389,6 +401,30 @@ const FirestoreDB = (() => {
     } catch (e) { console.error('adminDeleteOrganiser failed', e); throw e; }
   }
 
+  // ── Admin: add an organiser ─────────────────────────────────
+  async function adminAddOrganiser(payload) {
+    try {
+      const docId = payload.phone.trim();
+      await db.collection(COL_REGISTRATIONS).doc(docId).set(payload);
+      return { status: 'ok' };
+    } catch (e) { console.error('adminAddOrganiser failed', e); throw e; }
+  }
+
+  // ── Admin: update an organiser ──────────────────────────────
+  async function adminUpdateOrganiser(origPhone, payload) {
+    try {
+      const docId = payload.phone.trim();
+      const origDocId = origPhone.trim();
+
+      if (origDocId !== docId) {
+        await db.collection(COL_REGISTRATIONS).doc(origDocId).delete();
+      }
+
+      await db.collection(COL_REGISTRATIONS).doc(docId).set(payload);
+      return { status: 'ok' };
+    } catch (e) { console.error('adminUpdateOrganiser failed', e); throw e; }
+  }
+
   // ── Admin: handle correction decision ─────────────────────────
   async function handleCorrectionDecision(correctionId, decision, note) {
     try {
@@ -418,6 +454,8 @@ const FirestoreDB = (() => {
     adminGetAllOrganisers,
     adminToggleStatus,
     adminDeleteOrganiser,
+    adminAddOrganiser,
+    adminUpdateOrganiser,
     handleCorrectionDecision,
   };
 })();

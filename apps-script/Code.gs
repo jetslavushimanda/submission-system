@@ -289,6 +289,15 @@ function doPost(e) {
         result = getProgressData_(payload, authCheck);
       }
 
+    } else if (action === "uploadFile") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        var url = saveReportToDrive(payload.base64, payload.fileName, payload.mimeType);
+        result = { status: 'ok', url: url };
+      }
+
     } else {
       result = { status: "error", message: "Unknown action: " + action };
     }

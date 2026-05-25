@@ -512,17 +512,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
         btn.textContent = decision === 'Approved' ? 'Approving…' : 'Rejecting…';
 
         try {
-          const res = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-              action:    'handleCorrectionDecision',
-              phone:     _auth.phone,
-              requestId: requestId,
-              decision:  decision,
-            }),
-          });
-          if (!res.ok) throw new Error('Server error ' + res.status);
-          const data = await res.json();
+          const data = await FirestoreDB.handleCorrectionDecision(requestId, decision, _auth.organiserName);
           if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
 
           // Refresh the dashboard to show updated state
@@ -985,15 +975,10 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     if (!loadEl) return;
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'adminGetAllOrganisers', phone: _auth.phone }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.adminGetAllOrganisers();
       if (data.status !== 'ok') throw new Error(data.message || 'Load failed.');
 
-      _organisers = data.organisers || [];
+      _organisers = data.records || [];
       populateOrganiserTable(_organisers);
       bindOrgTableEvents();
       bindOrgFormEvents();
@@ -1195,26 +1180,13 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     saveBtn.textContent = 'Saving…';
 
     try {
-      let payload, action;
+      const record = { zone, name, type, organiser, phone, role, status };
+      let data;
       if (_orgEditTarget) {
-        action  = 'adminUpdateOrganiser';
-        payload = {
-          action, phone: _auth.phone,
-          origZone: _orgEditTarget.zone, origName: _orgEditTarget.name,
-          origRole: _orgEditTarget.role, origPhone: _orgEditTarget.phone,
-          zone, name, type, organiser, phone, role, status,
-        };
+        data = await FirestoreDB.adminUpdateOrganiser(_orgEditTarget.phone, record);
       } else {
-        action  = 'adminAddSchool';
-        payload = { action, phone: _auth.phone, zone, name, type, organiser, organiserPhone: phone, role, status };
+        data = await FirestoreDB.adminAddOrganiser(record);
       }
-
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
 
       orgShowMsg('ok', _orgEditTarget ? 'Organiser updated.' : 'Organiser added.');
@@ -1235,16 +1207,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     btn.textContent = label;
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'adminToggleStatus', phone: _auth.phone,
-          zone: btn.dataset.zone, name: btn.dataset.name,
-          role: btn.dataset.role, newStatus,
-        }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, newStatus);
       if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
       loadOrganisers();
     } catch (err) {
@@ -1258,16 +1221,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     btn.disabled    = true;
     btn.textContent = 'Activating…';
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'adminToggleStatus', phone: _auth.phone,
-          zone: btn.dataset.zone, name: btn.dataset.name,
-          role: btn.dataset.role, newStatus: 'Active',
-        }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, 'Active');
       if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
       loadOrganisers();
     } catch (err) {
@@ -1313,16 +1267,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       b.disabled    = true;
       b.textContent = 'Deleting…';
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'adminDeleteOrganiser', phone: _auth.phone,
-            zone: b.dataset.zone, name: b.dataset.name,
-            role: b.dataset.role, phone: b.dataset.phone,
-          }),
-        });
-        if (!res.ok) throw new Error('Server error ' + res.status);
-        const data = await res.json();
+        const data = await FirestoreDB.adminDeleteOrganiser(b.dataset.phone);
         if (data.status !== 'ok') throw new Error(data.message || 'Delete failed.');
         confirmRow.remove();
         loadOrganisers();
@@ -1507,23 +1452,18 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       saveBtn.textContent = 'Saving…';
 
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'saveDeadlines', phone: _auth.phone,
-            schoolOpen:  so || App.deadlines.School_Open,
-            schoolClose: sc,
-            zoneOpen:    zo || App.deadlines.Zone_Open,
-            zoneClose:   zc,
-          }),
-        });
-        if (!res.ok) throw new Error('Server error ' + res.status);
-        const data = await res.json();
+        const dlPayload = {
+          School_Open:  so || App.deadlines.School_Open,
+          School_Close: sc,
+          Zone_Open:    zo || App.deadlines.Zone_Open,
+          Zone_Close:   zc,
+        };
+        const data = await FirestoreDB.saveDeadlines(dlPayload);
         if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
 
-        App.setDeadlines(data.deadlines);
+        App.setDeadlines(dlPayload);
         dlShowMsg(dlFormMsg(), 'ok', 'Deadlines saved. Countdown updated immediately.');
-        updateDeadlineDisplay(data.deadlines);
+        updateDeadlineDisplay(dlPayload);
         setTimeout(() => {
           const p = dlFormPanel();
           if (p) p.classList.add('hidden');
@@ -1551,17 +1491,15 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
       try {
         const defaults = {
-          schoolOpen: '2026-05-26T00:00:00', schoolClose: '2026-05-30T23:59:00',
-          zoneOpen:   '2026-06-01T00:00:00', zoneClose:   '2026-06-05T23:59:00',
+          School_Open:  '2026-05-26T00:00:00',
+          School_Close: '2026-05-30T23:59:00',
+          Zone_Open:    '2026-06-01T00:00:00',
+          Zone_Close:   '2026-06-05T23:59:00',
         };
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'saveDeadlines', phone: _auth.phone, ...defaults }),
-        });
-        const data = await res.json();
+        const data = await FirestoreDB.saveDeadlines(defaults);
         if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
-        App.setDeadlines(data.deadlines);
-        updateDeadlineDisplay(data.deadlines);
+        App.setDeadlines(defaults);
+        updateDeadlineDisplay(defaults);
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Deadlines reset to original.'; }
       } catch (err) {
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
@@ -1582,20 +1520,16 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       if (msg) { msg.className = 'db-org-form-msg'; msg.textContent = 'Closing…'; }
 
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'saveDeadlines', phone: _auth.phone,
-            schoolOpen:  App.deadlines.School_Open,
-            schoolClose: nowS,
-            zoneOpen:    App.deadlines.Zone_Open,
-            zoneClose:   nowS,
-          }),
-        });
-        const data = await res.json();
+        const closedDl = {
+          School_Open:  App.deadlines.School_Open,
+          School_Close: nowS,
+          Zone_Open:    App.deadlines.Zone_Open,
+          Zone_Close:   nowS,
+        };
+        const data = await FirestoreDB.saveDeadlines(closedDl);
         if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
-        App.setDeadlines(data.deadlines);
-        updateDeadlineDisplay(data.deadlines);
+        App.setDeadlines(closedDl);
+        updateDeadlineDisplay(closedDl);
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Submissions closed.'; }
       } catch (err) {
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
