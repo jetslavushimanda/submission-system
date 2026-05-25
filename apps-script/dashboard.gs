@@ -19,7 +19,7 @@ var DB_STATUS_RED    = '#FFCDD2';
 
 // ── Main entry point ──────────────────────────────────────────
 function buildDashboard() {
-  var ss    = getSpreadsheet_();
+  var ss    = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(TAB_DASHBOARD);
   if (!sheet) sheet = ss.insertSheet(TAB_DASHBOARD);
 
@@ -367,7 +367,7 @@ function getFullDashboard_() {
   var tz = Session.getScriptTimeZone();
   var todayStr = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
 
-  var ss   = getSpreadsheet_();
+  var ss   = SpreadsheetApp.openById(SHEET_ID);
   var tab1 = ss.getSheetByName(TAB_REGISTERED);
   var tab2 = ss.getSheetByName(TAB_SCHOOL_SUB);
   var tab3 = ss.getSheetByName(TAB_ZONE_SUB);

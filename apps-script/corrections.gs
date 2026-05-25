@@ -193,6 +193,7 @@ function flagOriginalRow_(refNumber, source) {
 // Called automatically on first correction submission for existing deployments.
 function createCorrectionTab_() {
   try {
+    var ss  = SpreadsheetApp.openById(SHEET_ID);
     var tab = ss.insertSheet(TAB_CORRECTIONS);
     var h   = [
       'Timestamp', 'Request ID', 'Reference Number', 'Coordinator Name', 'Phone',

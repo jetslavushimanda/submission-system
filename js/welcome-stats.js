@@ -5,13 +5,11 @@ const WelcomeStats = (() => {
 
   const CACHE_PREFIX = 'jets_ws_';
   let _auth = null;
-  let _retryTimer = null;
 
   function cacheKey() { return CACHE_PREFIX + (_auth ? _auth.phone : ''); }
 
   // ── Public: show after login ───────────────────────────────────
   function show(auth) {
-    if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     _auth = auth;
     const container = document.getElementById('welcome-stats-container');
     if (!container) return;
@@ -41,7 +39,6 @@ const WelcomeStats = (() => {
 
   // ── Public: hide on sign-out ──────────────────────────────────
   function hide() {
-    if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     _auth = null;
     const container = document.getElementById('welcome-stats-container');
     if (container) { container.classList.add('hidden'); container.innerHTML = ''; }
@@ -51,17 +48,14 @@ const WelcomeStats = (() => {
   async function _fetch() {
     const container = document.getElementById('welcome-stats-container');
     if (!container || !_auth) return;
-    
-    if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
-    
-    if (!container.querySelector('.ws-skeleton') && !container.querySelector('.ws-greet')) {
-      _skeleton();
-    }
-    
+    _skeleton();
     try {
-      const data = await FirestoreDB.getWelcomeStats(
-        _auth.phone, _auth.role, _auth.zone, _auth.schoolName
-      );
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getWelcomeStats', phone: _auth.phone }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Failed');
       try { sessionStorage.setItem(cacheKey(), JSON.stringify(data)); } catch (_) {}
       _render(data);
@@ -89,19 +83,11 @@ const WelcomeStats = (() => {
 
   function _renderError() {
     const c = document.getElementById('welcome-stats-container');
-    if (!c || !_auth) return;
-    
-    // Ensure skeleton is displayed silently if it failed
-    if (!c.querySelector('.ws-skeleton')) {
-      _skeleton();
-    }
-    c.classList.remove('hidden');
-    
-    // Schedule silent retry every 30s
-    if (_retryTimer) clearTimeout(_retryTimer);
-    _retryTimer = setTimeout(() => {
-      _fetch();
-    }, 30000);
+    if (!c) return;
+    c.innerHTML = `
+      <div class="ws-card ws-error-card">
+        <p class="ws-error-txt">Could not load statistics. Continue to your form below.</p>
+      </div>`;
   }
 
   // ── Render dispatch ───────────────────────────────────────────
@@ -116,13 +102,11 @@ const WelcomeStats = (() => {
     const c = document.getElementById('welcome-stats-container');
     if (!c) return;
 
-    const slotTotal   = (typeof SLOT_TOTALS !== 'undefined' && SLOT_TOTALS[_auth.schoolType]) || 30;
-    const dlIso       = (typeof App !== 'undefined' && App.deadlines) ? App.deadlines.School_Close : null;
-    const dlDays      = dlIso ? _daysUntil(dlIso) : null;
-    const dlText      = dlDays === null ? ''
-                      : dlDays < 0  ? 'School deadline has passed'
-                      : dlDays === 0 ? 'School deadline: TODAY!'
-                      : `School deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
+    const slotTotal  = (typeof SLOT_TOTALS !== 'undefined' && SLOT_TOTALS[_auth.schoolType]) || 30;
+    const dlDays     = _daysUntil(SCHOOL_DEADLINE);
+    const dlText     = dlDays < 0  ? 'School deadline has passed'
+                     : dlDays === 0 ? '⏰ School deadline: TODAY!'
+                     : `⏰ School deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
 
     const needsSkills = (_auth.schoolType === 'Secondary School' || _auth.schoolType === 'Private School');
     const missing = [];
@@ -135,34 +119,39 @@ const WelcomeStats = (() => {
            <div class="ws-section-lbl">CATEGORIES NOT YET SUBMITTED:</div>
            ${missing.map(m => `<div class="ws-miss-item">&#8226; ${_esc(m)}</div>`).join('')}
          </div>`
-      : `<div class="ws-all-done">&#10003; All categories submitted!</div>`;
+      : `<div class="ws-all-done">✓ All categories submitted!</div>`;
 
-    c.classList.remove('hidden');
     c.innerHTML = `
-      <div class="ws-card ws-card-school">
-        <div class="ws-greet">Welcome ${_esc(_auth.organiserName)}.</div>
-        <div class="ws-sub">Tap a section below to start submitting participants for ${_esc(_auth.schoolName)}.</div>
+      <div class="ws-card">
+        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)} 👋</div>
+        <div class="ws-sub">${_esc(_auth.schoolName)} &nbsp;|&nbsp; ${_esc(_auth.zone)} Zone</div>
         <div class="ws-div"></div>
         <div class="ws-hdr">YOUR SUBMISSION SUMMARY:</div>
         <div class="ws-rule"></div>
         <div class="ws-row">
+          <span class="ws-ico">📊</span>
           <span class="ws-lbl">Total Submitted:</span>
           <span class="ws-val${data.total >= slotTotal ? ' ws-full' : ''}">${data.total} of ${slotTotal} slots</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">📚</span>
           <span class="ws-lbl">Innovations:</span>
           <span class="ws-val">${data.innovations} submitted</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">🎓</span>
           <span class="ws-lbl">Academics:</span>
           <span class="ws-val">${data.academics} submitted</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">🔧</span>
           <span class="ws-lbl">Skills:</span>
           <span class="ws-val">${data.skills} submitted</span>
         </div>
         ${missingHtml}
-        ${dlText ? `<div class="ws-rule"></div><div class="ws-deadline${dlDays !== null && dlDays >= 0 && dlDays <= 2 ? ' ws-dl-urgent' : ''}">${dlText}</div>` : ''}
+        <div class="ws-rule"></div>
+        <div class="ws-deadline${dlDays >= 0 && dlDays <= 2 ? ' ws-dl-urgent' : ''}">${dlText}</div>
+        <div class="ws-div"></div>
       </div>`;
   }
 
@@ -172,12 +161,10 @@ const WelcomeStats = (() => {
     if (!c) return;
 
     const ZONE_TOTAL = 64;
-    const dlIso   = (typeof App !== 'undefined' && App.deadlines) ? App.deadlines.Zone_Close : null;
-    const dlDays  = dlIso ? _daysUntil(dlIso) : null;
-    const dlText  = dlDays === null ? ''
-                  : dlDays < 0  ? 'Zone deadline has passed'
-                  : dlDays === 0 ? 'Zone deadline: TODAY!'
-                  : `Zone deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
+    const dlDays  = _daysUntil(ZONE_DEADLINE);
+    const dlText  = dlDays < 0  ? 'Zone deadline has passed'
+                  : dlDays === 0 ? '⏰ Zone deadline: TODAY!'
+                  : `⏰ Zone deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
 
     const allSchools   = (typeof ZONES !== 'undefined' && ZONES[_auth.zone])
                          ? ZONES[_auth.zone].schools.map(s => s.name) : [];
@@ -189,34 +176,39 @@ const WelcomeStats = (() => {
            <div class="ws-section-lbl">SCHOOLS NOT YET SUBMITTED:</div>
            ${notSubmitted.map(s => `<div class="ws-miss-item">&#8226; ${_esc(s)}</div>`).join('')}
          </div>`
-      : `<div class="ws-all-done">&#10003; All schools have submitted!</div>`;
+      : `<div class="ws-all-done">✓ All schools have submitted!</div>`;
 
-    c.classList.remove('hidden');
     c.innerHTML = `
-      <div class="ws-card ws-card-zone">
-        <div class="ws-greet">Welcome ${_esc(_auth.organiserName)}.</div>
-        <div class="ws-sub">Tap a section below to start submitting participants for ${_esc(_auth.zone)} Zone.</div>
+      <div class="ws-card">
+        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)} 👋</div>
+        <div class="ws-sub">${_esc(_auth.zone)} Zone</div>
         <div class="ws-div"></div>
         <div class="ws-hdr">ZONE SUBMISSION SUMMARY:</div>
         <div class="ws-rule"></div>
         <div class="ws-row">
+          <span class="ws-ico">📊</span>
           <span class="ws-lbl">Total Submitted:</span>
           <span class="ws-val${data.total >= ZONE_TOTAL ? ' ws-full' : ''}">${data.total} of ${ZONE_TOTAL} slots</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">📚</span>
           <span class="ws-lbl">Innovations:</span>
           <span class="ws-val">${data.innovations} submitted</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">🎓</span>
           <span class="ws-lbl">Academics:</span>
           <span class="ws-val">${data.academics} submitted</span>
         </div>
         <div class="ws-row">
+          <span class="ws-ico">🔧</span>
           <span class="ws-lbl">Skills:</span>
           <span class="ws-val">${data.skills} submitted</span>
         </div>
         ${notSubmHtml}
-        ${dlText ? `<div class="ws-rule"></div><div class="ws-deadline${dlDays !== null && dlDays >= 0 && dlDays <= 2 ? ' ws-dl-urgent' : ''}">${dlText}</div>` : ''}
+        <div class="ws-rule"></div>
+        <div class="ws-deadline${dlDays >= 0 && dlDays <= 2 ? ' ws-dl-urgent' : ''}">${dlText}</div>
+        <div class="ws-div"></div>
       </div>`;
   }
 

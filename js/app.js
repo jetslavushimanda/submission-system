@@ -7,37 +7,14 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREF
 
 const SESSION_KEY = "jets_session";
 
-// FIX 4: Shared fetch helper with AbortController timeout.
-// Default 12 s — enough for Apps Script cold starts.
-async function postWithTimeout(body, ms) {
-  ms = ms || 10000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      body:   JSON.stringify(body),
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    return await res.json();
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
-}
-
 // ── Submission Deadlines ──────────────────────────────────────
-// Initialized to default values; refreshed from Settings tab on boot.
-let _deadlineSchoolOpen  = new Date("2026-05-26T00:00:00");
-let _deadlineSchoolClose = new Date("2026-05-30T23:59:00");
-let _deadlineZoneOpen    = new Date("2026-06-01T00:00:00");
-let _deadlineZoneClose   = new Date("2026-06-05T23:59:00");
+const SCHOOL_DEADLINE = "2026-05-30T23:59:00";
+const ZONE_OPEN       = "2026-06-01T00:00:00";
+const ZONE_DEADLINE   = "2026-06-05T23:59:00";
 
-function schoolClosed() { return new Date() > _deadlineSchoolClose; }
-function zoneNotOpen()  { return new Date() < _deadlineZoneOpen; }
-function zoneClosed()   { return new Date() > _deadlineZoneClose; }
+function schoolClosed() { return new Date() > new Date(SCHOOL_DEADLINE); }
+function zoneNotOpen()  { return new Date() < new Date(ZONE_OPEN); }
+function zoneClosed()   { return new Date() > new Date(ZONE_DEADLINE); }
 
 let currentMode = null;
 let authData    = null;
@@ -65,12 +42,12 @@ window.NetStatus = (() => {
 
     if (isOffline) {
       b.className  = 'net-banner net-banner-offline';
-      b.textContent = 'You are offline. Do not submit until reconnected.';
+      b.textContent = '⚠️ You are offline. Do not submit until reconnected.';
       const sub = document.getElementById('sf-submit');
       if (sub) sub.disabled = true;
     } else {
       b.className  = 'net-banner net-banner-online';
-      b.textContent = 'Connected. You can submit now.';
+      b.textContent = '✅ Connected. You can submit now.';
       if (typeof window._sfValidate === 'function') window._sfValidate();
       _timer = setTimeout(() => b.classList.add('hidden'), 3000);
     }
@@ -98,92 +75,29 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   updateCountdowns();
-  setInterval(updateCountdowns, 1000);
+  setInterval(updateCountdowns, 60000);
 
-  // Fetch live deadlines from Settings tab (non-blocking)
-  loadDeadlines();
-
-  // Restore session if available using new keys
-  const userPhone = sessionStorage.getItem('userPhone');
-  const userRole  = sessionStorage.getItem('userRole');
-  const schoolInfoStr = sessionStorage.getItem('schoolInfo');
-  
-  if (userPhone && userRole && schoolInfoStr) {
+  // Restore session if available
+  const stored = sessionStorage.getItem(SESSION_KEY);
+  if (stored) {
     try {
-      const schoolInfo = JSON.parse(schoolInfoStr);
-      authData = {
-        phone: userPhone,
-        role: userRole,
-        zone: schoolInfo.zone,
-        schoolName: schoolInfo.schoolName,
-        schoolType: schoolInfo.schoolType,
-        organiserName: schoolInfo.organiserName
-      };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
-      applyRoleUI(userRole);
-      if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-    } catch (_) {
-      sessionStorage.removeItem('userPhone');
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('schoolInfo');
-      sessionStorage.removeItem(SESSION_KEY);
-    }
-  } else {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) {
-      try {
-        authData = JSON.parse(stored);
-        if (authData && authData.phone && authData.role) {
-          sessionStorage.setItem('userPhone', authData.phone);
-          sessionStorage.setItem('userRole', authData.role);
-          sessionStorage.setItem('schoolInfo', JSON.stringify({
-            zone: authData.zone,
-            schoolName: authData.schoolName,
-            schoolType: authData.schoolType,
-            organiserName: authData.organiserName
-          }));
-          applyRoleUI(authData.role);
-          if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-        }
-      } catch (_) {
-        sessionStorage.removeItem(SESSION_KEY);
+      authData = JSON.parse(stored);
+      if (authData && authData.phone && authData.role) {
+        applyRoleUI(authData.role);
+        if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
       }
+    } catch (_) {
+      sessionStorage.removeItem(SESSION_KEY);
     }
   }
 });
 
-// ── Load Live Deadlines ───────────────────────────────────────
-// Reads deadlines from Firestore (fast, no cold start).
-async function loadDeadlines() {
-  const cached = sessionStorage.getItem(SESSION_KEY + '_dl');
-  if (cached) {
-    try { applyDeadlines(JSON.parse(cached)); return; } catch (_) {}
-  }
-  try {
-    const data = await FirestoreDB.getDeadlines();
-    if (data.status === 'ok' && data.deadlines && Object.keys(data.deadlines).length) {
-      applyDeadlines(data.deadlines);
-      sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
-    }
-  } catch (_) {}
-}
-
-function applyDeadlines(dl) {
-  if (dl.School_Open)  _deadlineSchoolOpen  = new Date(dl.School_Open);
-  if (dl.School_Close) _deadlineSchoolClose = new Date(dl.School_Close);
-  if (dl.Zone_Open)    _deadlineZoneOpen    = new Date(dl.Zone_Open);
-  if (dl.Zone_Close)   _deadlineZoneClose   = new Date(dl.Zone_Close);
-  if (authData && authData.role) applyRoleUI(authData.role);
-}
-
 // ── Phone Verification ────────────────────────────────────────
-// FIX 6: Uses getInitData — single round-trip returns auth + deadlines.
-// FIX 4: postWithTimeout aborts after 12 s instead of hanging forever.
 async function verifyPhone() {
-  const input = document.getElementById('landing-phone');
-  const msgEl = document.getElementById('landing-auth-msg');
-  const btn   = document.getElementById('btn-verify');
-  const phone = input.value.trim();
+  const input   = document.getElementById('landing-phone');
+  const msgEl   = document.getElementById('landing-auth-msg');
+  const btn     = document.getElementById('btn-verify');
+  const phone   = input.value.trim();
 
   if (!phone) {
     msgEl.innerHTML = '<p class="auth-msg-error">Please enter your phone number.</p>';
@@ -195,24 +109,16 @@ async function verifyPhone() {
   msgEl.innerHTML = '';
 
   try {
-    const data = await postWithTimeout({ action: 'getInitData', phone }, 12000);
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'checkAuth', phone }),
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
 
     if (data.status === 'found') {
       authData = { phone, ...data };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
-      sessionStorage.setItem('userPhone', phone);
-      sessionStorage.setItem('userRole', data.role);
-      sessionStorage.setItem('schoolInfo', JSON.stringify({
-        zone: data.zone,
-        schoolName: data.schoolName,
-        schoolType: data.schoolType,
-        organiserName: data.organiserName
-      }));
-      // FIX 5: Cache deadlines so subsequent page loads skip the server call.
-      if (data.deadlines && Object.keys(data.deadlines).length) {
-        applyDeadlines(data.deadlines);
-        sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
-      }
       applyRoleUI(data.role);
       msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
@@ -220,28 +126,18 @@ async function verifyPhone() {
     } else if (data.reason === 'inactive') {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('userPhone');
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
+      msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact Mwansa Gibson: 0973375828</p>';
 
     } else {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('userPhone');
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
+      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact Mwansa Gibson: 0973375828</p>';
     }
 
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      msgEl.innerHTML = '<p class="auth-msg-error">Connection timeout. Check your internet and try again.</p>';
-    } else {
-      msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
-    }
+  } catch (_) {
+    msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Verify';
@@ -249,12 +145,15 @@ async function verifyPhone() {
 }
 
 // ── Role UI ───────────────────────────────────────────────────
+// Enables/disables/shows/hides the three landing buttons based on role.
+// Disabled buttons are truly disabled (not just visually greyed).
 function applyRoleUI(role) {
   const schoolBtn = document.getElementById('btn-open-school');
   const zoneBtn   = document.getElementById('btn-open-zone');
   const dashBtn   = document.getElementById('btn-open-dashboard');
 
   if (role === 'District') {
+    // District always has full access regardless of deadlines
     enableBtn(schoolBtn);
     enableBtn(zoneBtn);
     dashBtn.classList.remove('hidden');
@@ -309,15 +208,17 @@ function applyDeadlineMsgs(role) {
 
   schoolMsg.innerHTML = schoolClosed()
     ? `<div class="deadline-closed-notice">School submissions are now closed.<br>
-         Contact the District JETS Organiser: 0973375828</div>`
+         Submission period was 26–30 May 2026.<br>
+         Contact Mwansa Gibson: 0973375828</div>`
     : '';
 
   if (zoneNotOpen()) {
     zoneMsg.innerHTML = `<div class="deadline-warn-notice">Zone submissions open on<br>
-       ${fmtDlFull(_deadlineZoneOpen)}. Check back then.</div>`;
+       1st June 2026. Check back then.</div>`;
   } else if (zoneClosed()) {
     zoneMsg.innerHTML = `<div class="deadline-closed-notice">Zone submissions are now closed.<br>
-       Contact the District JETS Organiser: 0973375828</div>`;
+       Submission period was 1–5 June 2026.<br>
+       Contact Mwansa Gibson: 0973375828</div>`;
   } else {
     zoneMsg.innerHTML = '';
   }
@@ -327,6 +228,7 @@ function showDeadlineClosed(mode) {
   const isSchool = mode === 'school';
   const pageId   = isSchool ? 'page-school' : 'page-zone';
   const label    = isSchool ? 'School Submission' : 'Zone Submission';
+  const period   = isSchool ? '26–30 May 2026'    : '1–5 June 2026';
   const who      = isSchool ? 'School' : 'Zone';
   showPage(pageId);
   setPageHTML(pageId, `
@@ -338,7 +240,8 @@ function showDeadlineClosed(mode) {
       <div class="auth-status-card">
         <div class="alert alert-error">
           <strong>${who} submissions are now closed.</strong><br>
-          Contact the District JETS Organiser: 0973375828
+          Submission period was ${period}.<br>
+          Contact Mwansa Gibson: 0973375828
         </div>
         <button class="btn-auth-action btn-back-home" onclick="App.backToLanding()">Back to Home</button>
       </div>
@@ -355,7 +258,7 @@ function showDeadlineNotOpen() {
     <div class="auth-status-wrap">
       <div class="auth-status-card">
         <div class="alert alert-info">
-          Zone submissions open on<br>${fmtDlFull(_deadlineZoneOpen)}. Check back then.
+          Zone submissions open on<br>1st June 2026. Check back then.
         </div>
         <button class="btn-auth-action btn-back-home" onclick="App.backToLanding()">Back to Home</button>
       </div>
@@ -363,98 +266,68 @@ function showDeadlineNotOpen() {
 }
 
 // ── Countdown Timers ──────────────────────────────────────────
-// Updates every second. Box-style display with days/hrs/mins/secs.
 function updateCountdowns() {
   const el = document.getElementById('deadline-countdowns');
   if (!el) return;
 
-  const now = new Date();
+  const now        = new Date();
+  const schoolDl   = new Date(SCHOOL_DEADLINE);
+  const zoneOpenDt = new Date(ZONE_OPEN);
+  const zoneDl     = new Date(ZONE_DEADLINE);
 
-  // --- School card ---
   let schoolCard;
-  if (now > _deadlineSchoolClose) {
+  if (now > schoolDl) {
     schoolCard = `
-<div class="deadline-card deadline-card-closed">
-  <div class="deadline-card-label">School Submissions</div>
-  <span class="deadline-badge-closed">CLOSED</span>
-  <div class="deadline-period">${fmtDl(_deadlineSchoolOpen)} &ndash; ${fmtDl(_deadlineSchoolClose)}</div>
-</div>`;
+      <div class="deadline-card">
+        <div class="deadline-card-label">School Submissions</div>
+        <span class="deadline-badge-closed">CLOSED</span>
+        <div class="deadline-period">26–30 May 2026</div>
+      </div>`;
   } else {
-    const ms  = _deadlineSchoolClose - now;
-    const cls = timerColorClass(ms);
-    const p   = msToParts(ms);
+    const { days, hours, minutes, colorClass } = diffParts(schoolDl - now);
     schoolCard = `
-<div class="deadline-card ${cls}">
-  <div class="deadline-card-label">School submissions close in:</div>
-  ${timerBoxesHTML(p)}
-</div>`;
+      <div class="deadline-card">
+        <div class="deadline-card-label">School submissions close in:</div>
+        <div class="deadline-timer ${colorClass}">${days}d ${hours}h ${minutes}m</div>
+      </div>`;
   }
 
-  // --- Zone card ---
   let zoneCard;
-  if (now > _deadlineZoneClose) {
+  if (now > zoneDl) {
     zoneCard = `
-<div class="deadline-card deadline-card-closed">
-  <div class="deadline-card-label">Zone Submissions</div>
-  <span class="deadline-badge-closed">CLOSED</span>
-  <div class="deadline-period">${fmtDl(_deadlineZoneOpen)} &ndash; ${fmtDl(_deadlineZoneClose)}</div>
-</div>`;
-  } else if (now < _deadlineZoneOpen) {
-    const ms  = _deadlineZoneOpen - now;
-    const cls = timerColorClass(ms);
-    const p   = msToParts(ms);
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone Submissions</div>
+        <span class="deadline-badge-closed">CLOSED</span>
+        <div class="deadline-period">1–5 June 2026</div>
+      </div>`;
+  } else if (now < zoneOpenDt) {
+    const { days, colorClass } = diffParts(zoneOpenDt - now);
     zoneCard = `
-<div class="deadline-card ${cls}">
-  <div class="deadline-card-label">Zone submissions open in:</div>
-  ${timerBoxesHTML(p)}
-</div>`;
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone submissions open in:</div>
+        <div class="deadline-timer ${colorClass}">${days} day${days !== 1 ? 's' : ''}</div>
+      </div>`;
   } else {
-    const ms  = _deadlineZoneClose - now;
-    const cls = timerColorClass(ms);
-    const p   = msToParts(ms);
+    const { days, hours, minutes, colorClass } = diffParts(zoneDl - now);
     zoneCard = `
-<div class="deadline-card ${cls}">
-  <div class="deadline-card-label">Zone submissions close in:</div>
-  ${timerBoxesHTML(p)}
-</div>`;
+      <div class="deadline-card">
+        <div class="deadline-card-label">Zone submissions close in:</div>
+        <div class="deadline-timer ${colorClass}">${days}d ${hours}h ${minutes}m</div>
+      </div>`;
   }
 
   el.innerHTML = schoolCard + zoneCard;
 }
 
-function timerBoxesHTML(p) {
-  const box = (v, lbl) =>
-    `<div class="deadline-box"><span class="deadline-num">${pad2(v)}</span><span class="deadline-unit">${lbl}</span></div>`;
-  const sep = `<div class="deadline-sep">:</div>`;
-  return `<div class="deadline-boxes">${box(p.d,'DAYS')}${sep}${box(p.h,'HRS')}${sep}${box(p.m,'MINS')}${sep}${box(p.s,'SECS')}</div>`;
-}
-
-function msToParts(ms) {
-  const t = Math.max(0, Math.floor(ms / 1000));
-  return {
-    d: Math.floor(t / 86400),
-    h: Math.floor((t % 86400) / 3600),
-    m: Math.floor((t % 3600) / 60),
-    s: t % 60,
-  };
-}
-
-function timerColorClass(ms) {
-  if (ms <= 24 * 3600 * 1000)      return 'timer-red';
-  if (ms <= 3 * 24 * 3600 * 1000)  return 'timer-orange';
-  return 'timer-green';
-}
-
-function pad2(n) { return n < 10 ? '0' + n : '' + n; }
-
-function fmtDl(d) {
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return d.getDate() + ' ' + mo[d.getMonth()];
-}
-
-function fmtDlFull(d) {
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return d.getDate() + ' ' + mo[d.getMonth()] + ' ' + d.getFullYear();
+function diffParts(ms) {
+  const total   = Math.max(0, Math.floor(ms / 60000));
+  const days    = Math.floor(total / 1440);
+  const hours   = Math.floor((total % 1440) / 60);
+  const minutes = total % 60;
+  const colorClass = ms <= 24 * 60 * 60 * 1000   ? 'timer-red'
+                   : ms <= 3 * 24 * 60 * 60 * 1000 ? 'timer-orange'
+                   : 'timer-green';
+  return { days, hours, minutes, colorClass };
 }
 
 function roleLabel(role) {
@@ -475,6 +348,7 @@ function startFlow(mode) {
 
   const role = authData.role;
 
+  // Backend-mirrored role check — blocks any client-side bypass attempt.
   if (mode === 'school' && role !== 'School' && role !== 'District') {
     showAccessDenied('school'); return;
   }
@@ -485,6 +359,7 @@ function startFlow(mode) {
     showAccessDenied('dashboard'); return;
   }
 
+  // Deadline guard — District bypasses all deadline restrictions
   if (role !== 'District') {
     if (mode === 'school' && schoolClosed()) {
       showDeadlineClosed('school'); return;
@@ -500,15 +375,12 @@ function startFlow(mode) {
   currentMode = mode;
 
   if (mode === 'school') {
-    setThemeColor('#1a5c2a');
     showPage('page-school');
     SchoolForm.render('page-school', authData);
   } else if (mode === 'zone') {
-    setThemeColor('#1a3c6e');
     showPage('page-zone');
     ZoneForm.render('page-zone', authData);
   } else if (mode === 'dashboard') {
-    setThemeColor('#1a3c6e');
     showPage('page-dashboard');
     Dashboard.render('page-dashboard', authData);
   }
@@ -523,9 +395,9 @@ function showAccessDenied(attemptedMode) {
 
   let msg;
   if (role === 'School') {
-    msg = 'Unauthorized. You are registered as a School JETS Organiser and may only access the School Submission form.';
+    msg = 'Unauthorized. Access denied. You are registered as a School JETS Organiser and may only access the School Submission form.';
   } else if (role === 'Zone') {
-    msg = 'Unauthorized. You are registered as a Zonal JETS Coordinator and may only access the Zone Submission form.';
+    msg = 'Unauthorized. Access denied. You are registered as a Zonal JETS Coordinator and may only access the Zone Submission form.';
   } else {
     msg = 'Unauthorized. Access denied.';
   }
@@ -559,28 +431,11 @@ function setPageHTML(pageId, html) {
 function backToLanding() {
   if (typeof Dashboard !== 'undefined') Dashboard.destroy();
   currentMode = null;
-  setThemeColor('#1a5c2a');
   showPage('page-landing');
 }
 
-function setThemeColor(color) {
-  const meta = document.getElementById('meta-theme-color');
-  if (meta) meta.setAttribute('content', color);
-  
-  // Dynamic browser title bar updates
-  if (color === '#1a5c2a') {
-    document.title = currentMode === 'school' ? 'School Submission | JETS 2026' : 'JETS 2026 | Lavushimanda District';
-  } else if (color === '#1a3c6e') {
-    document.title = currentMode === 'zone' ? 'Zone Submission | JETS 2026' : 'District Dashboard | JETS 2026';
-  }
-}
-
 function signOut() {
-  sessionStorage.removeItem('userPhone');
-  sessionStorage.removeItem('userRole');
-  sessionStorage.removeItem('schoolInfo');
   sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_KEY + '_dl');
   authData = null;
   lockAllButtons();
   document.getElementById('landing-phone').value = '';
@@ -605,18 +460,6 @@ const App = {
   maskGmail: maskPhone,
   showPage,
   setPageHTML,
-  loadDeadlines,
-  setDeadlines(dl) {
-    applyDeadlines(dl);
-  },
-  get deadlines() {
-    return {
-      School_Open:  _deadlineSchoolOpen.toISOString().slice(0, 19),
-      School_Close: _deadlineSchoolClose.toISOString().slice(0, 19),
-      Zone_Open:    _deadlineZoneOpen.toISOString().slice(0, 19),
-      Zone_Close:   _deadlineZoneClose.toISOString().slice(0, 19),
-    };
-  },
   get authData()    { return authData; },
   get currentMode() { return currentMode; },
 };

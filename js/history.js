@@ -105,12 +105,19 @@ ${buildCorrectionModalHTML()}`;
 </div>`;
   }
 
-  // ── Fetch ───────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────
   async function fetchHistory() {
     try {
-      const data = await FirestoreDB.getSubmissionHistory(
-        _auth.phone, _formType, _auth.zone, _auth.schoolName
-      );
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubmissionHistory',
+          phone:  _auth.phone,
+          source: _formType,
+        }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Failed to load history.');
 
       _allRows = data.rows || [];
@@ -293,18 +300,25 @@ ${buildCorrectionModalHTML()}`;
     if (msgEl) { msgEl.textContent = ''; msgEl.className = 'sh-corr-msg hidden'; }
 
     try {
-      const data = await FirestoreDB.submitCorrectionRequest({
-        phone:           _auth.phone,
-        coordinatorName: _auth.organiserName || '',
-        schoolOrZone:    _formType === 'zone'
-                           ? (_auth.zone || _auth.schoolName || '')
-                           : (_auth.schoolName || ''),
-        refNumber:       _correctionTarget.refNumber,
-        participantName: _correctionTarget.fullName || '',
-        whatToCorrect:   what,
-        correctInfo:     info,
-        source:          _formType,
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action:          'submitCorrectionRequest',
+          phone:           _auth.phone,
+          coordinatorName: _auth.organiserName || '',
+          schoolOrZone:    _formType === 'zone'
+                             ? (_auth.zone || _auth.schoolName || '')
+                             : (_auth.schoolName || ''),
+          refNumber:       _correctionTarget.refNumber,
+          participantName: _correctionTarget.fullName || '',
+          whatToCorrect:   what,
+          correctInfo:     info,
+          source:          _formType,
+        }),
       });
+
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Submission failed.');
 
       // Update row's correctionStatus in memory so badge updates on re-render
