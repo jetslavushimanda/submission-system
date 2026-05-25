@@ -47,7 +47,7 @@ function checkRegistration(phone) {
   var phoneNorm = normalizePhone_(phone);
   Logger.log('checkRegistration called with: ' + phone + ' (normalized: ' + phoneNorm + ')');
 
-  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_REGISTERED);
+  var sheet = openSheet_(TAB_REGISTERED);
   if (!sheet) { Logger.log('Sheet tab not found'); return { found: false }; }
 
   var lastRow = sheet.getLastRow();
@@ -79,7 +79,7 @@ function checkRegistration(phone) {
     return {
       found:   false,
       reason:  'inactive',
-      message: 'Registration pending. Contact Mwansa Gibson: 0973375828',
+      message: 'Registration pending. Contact the District JETS Organiser: 0973375828',
     };
   }
 

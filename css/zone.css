@@ -59,3 +59,17 @@
 #page-zone .btn-add-another {
   background: linear-gradient(135deg, #1f4a88, #1a3c6e, #0d2347);
 }
+
+/* ── Progress bars (blue theme) ─────────────────────────────── */
+#page-zone .sf-progress-hdr {
+  background: linear-gradient(135deg, #1f4a88, #1a3c6e);
+}
+#page-zone .sf-prog-section-title {
+  color: #1a3c6e;
+}
+#page-zone .sf-prog-bar.sf-prog-bar-full {
+  background: #1a3c6e;
+}
+#page-zone .sf-prog-count.sf-prog-count-done {
+  color: #1a3c6e;
+}

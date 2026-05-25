@@ -7,8 +7,12 @@
 const Dashboard = (() => {
 
   let _pageId, _auth, _data, _cacheTime, _feedTimer, _allSubs;
+  let _organisers = null;   // cached from adminGetAllOrganisers
+  let _orgEditTarget = null; // the record being edited { zone,name,role,phone,... }
   const CACHE_MS       = 5 * 60 * 1000;  // 5 minutes
   const FEED_REFRESH_S = 60 * 1000;       // 60 seconds
+
+  let _activeDrawerId = null; // Currently open drawer identifier
 
   const ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
 
@@ -41,6 +45,7 @@ const Dashboard = (() => {
     _data     = null;
     _allSubs  = null;
     _cacheTime = 0;
+    _activeDrawerId = null;
 
     if (auth.role !== 'District') {
       App.setPageHTML(pageId, deniedHTML());
@@ -84,14 +89,14 @@ const Dashboard = (() => {
 <header class="db-header">
   <div class="db-header-logos">
     <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="db-logo"
-         onerror="this.classList.add('logo-missing')">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
     <div class="db-header-text">
-      <p class="db-h-title">JETS 2024&#8211;2026 District Dashboard</p>
+      <p class="db-h-title">JETS 2026 District Dashboard</p>
       <p class="db-h-sub">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
       <p class="db-h-dist">Signed in: <strong>${App.maskPhone(_auth.phone)}</strong> &mdash; ${_auth.organiserName}</p>
     </div>
     <img src="assets/jets-logo.png" alt="JETS Logo" class="db-logo"
-         onerror="this.classList.add('logo-missing')">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
   </div>
   <div class="db-meta-bar">
     <span>Last updated: <span id="db-last-updated">&#8212;</span></span>
@@ -104,29 +109,21 @@ const Dashboard = (() => {
   }
 
   function skeletonHTML() {
-    const sk = `<div class="db-skeleton"></div>`;
     return `
-<div class="db-section">
-  <div class="db-section-title">Overview</div>
-  <div class="db-skeleton-counters">
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-  </div>
+<div class="db-button-grid">
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
 </div>
-<div class="db-section">
-  <div class="db-section-title">Zone Progress</div>
-  <div style="padding:12px">
-    ${[1,2,3,4,5].map(() => `<div class="db-skeleton db-skeleton-zone"></div>`).join('')}
-  </div>
+<div style="text-align: center; margin-top: 24px; color: var(--db-navy); font-weight: 600;">
+  Loading dashboard data...
 </div>
-<div class="db-section">
-  <div class="db-section-title">School Status (42 schools)</div>
-  <div style="padding:12px">
-    ${[1,2,3,4,5,6].map(() => `<div class="db-skeleton db-skeleton-row"></div>`).join('')}
-  </div>
-</div>`;
+`;
   }
 
   // ── Data Loading ──────────────────────────────────────────────
@@ -139,12 +136,7 @@ const Dashboard = (() => {
 
     setRefreshBtn(true);
     try {
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getFullDashboard', phone: _auth.phone }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.getFullDashboard();
       if (data.status !== 'ok') throw new Error(data.message || 'Dashboard load failed.');
 
       _data     = data;
@@ -166,15 +158,19 @@ const Dashboard = (() => {
 
   async function refreshFeed() {
     try {
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getRecentFeed', phone: _auth.phone }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await FirestoreDB.getRecentFeed();
       if (data.status === 'ok') {
         const feedEl = document.getElementById('db-feed-list');
-        if (feedEl) feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
+        if (feedEl) {
+          feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
+          feedEl.querySelectorAll('.btn-feed-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const d = btn.dataset;
+              promptDelete(d.ref, d.participant, d.school, d.category);
+            });
+          });
+        }
         const tick = document.getElementById('db-feed-tick');
         if (tick) tick.textContent = 'Feed refreshed ' + fmtTimeShort(new Date().toISOString());
       }
@@ -185,7 +181,58 @@ const Dashboard = (() => {
     const btn = document.getElementById('db-refresh-btn');
     if (!btn) return;
     btn.disabled    = loading;
-    btn.textContent = loading ? '&#8635; Loading…' : '&#8635; Refresh';
+    btn.textContent = loading ? 'Loading…' : 'Refresh';
+  }
+
+  // ── Drawer Management ──────────────────────────────────────────
+  async function openDrawer(drawerId) {
+    const now = Date.now();
+    if (!_data || (now - _cacheTime) >= CACHE_MS) {
+      showGlobalLoader();
+      try {
+        await loadFullData(true);
+      } catch (err) {
+        hideGlobalLoader();
+        alert("Failed to load dashboard: " + err.message);
+        return;
+      }
+      hideGlobalLoader();
+    }
+    activateDrawer(drawerId);
+  }
+
+  function activateDrawer(drawerId) {
+    closeActiveDrawer(true);
+    const drawer = document.getElementById('drawer-' + drawerId);
+    const backdrop = document.getElementById('db-backdrop');
+    if (drawer && backdrop) {
+      drawer.classList.add('active');
+      backdrop.classList.add('active');
+      _activeDrawerId = drawerId;
+    }
+  }
+
+  function closeActiveDrawer(isSwapping) {
+    document.querySelectorAll('.bottom-drawer').forEach(d => d.classList.remove('active'));
+    const backdrop = document.getElementById('db-backdrop');
+    if (backdrop) backdrop.classList.remove('active');
+    if (!isSwapping) {
+      _activeDrawerId = null;
+    }
+  }
+
+  function closeDeleteDrawer() {
+    closeActiveDrawer();
+  }
+
+  function showGlobalLoader() {
+    const el = document.getElementById('db-global-loader');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function hideGlobalLoader() {
+    const el = document.getElementById('db-global-loader');
+    if (el) el.classList.add('hidden');
   }
 
   // ── Render All Sections ───────────────────────────────────────
@@ -198,19 +245,196 @@ const Dashboard = (() => {
     const corrections = data.corrections || [];
 
     body.innerHTML = `
-${renderCorrections(corrections)}
-${renderOverview(data.overview)}
-${renderZones(data.zones)}
-${renderSchoolList(data.schoolList)}
-${renderFeed(data.recentFeed)}
-${renderCoverage(data.coverage)}
-${renderSkills(data.skills)}
-${renderActions(data)}`;
+<!-- Button Grid -->
+<div class="db-button-grid">
+  <button class="db-grid-btn btn-overview" onclick="Dashboard.openDrawer('overview')">
+    <span class="db-btn-icon">📊</span>
+    <span class="db-btn-text">Overview</span>
+  </button>
+  <button class="db-grid-btn btn-zone" onclick="Dashboard.openDrawer('zone')">
+    <span class="db-btn-icon">📍</span>
+    <span class="db-btn-text">Zone Progress</span>
+  </button>
+  <button class="db-grid-btn btn-school" onclick="Dashboard.openDrawer('school')">
+    <span class="db-btn-icon">🏫</span>
+    <span class="db-btn-text">School Status</span>
+  </button>
+  <button class="db-grid-btn btn-feed" onclick="Dashboard.openDrawer('feed')">
+    <span class="db-btn-icon">🔔</span>
+    <span class="db-btn-text">Recent Feed</span>
+  </button>
+  <button class="db-grid-btn btn-coverage" onclick="Dashboard.openDrawer('coverage')">
+    <span class="db-btn-icon">📈</span>
+    <span class="db-btn-text">Category Coverage</span>
+  </button>
+  <button class="db-grid-btn btn-skills" onclick="Dashboard.openDrawer('skills')">
+    <span class="db-btn-icon">🛠️</span>
+    <span class="db-btn-text">Skills Tracker</span>
+  </button>
+  <button class="db-grid-btn btn-admin" onclick="Dashboard.openDrawer('admin')">
+    <span class="db-btn-icon">🛡️</span>
+    <span class="db-btn-text">Admin Panel</span>
+  </button>
+  <button class="db-grid-btn btn-settings" onclick="Dashboard.openDrawer('settings')">
+    <span class="db-btn-icon">⚙️</span>
+    <span class="db-btn-text">Actions & Settings</span>
+  </button>
+</div>
+
+<!-- Shared Backdrop Overlay -->
+<div id="db-backdrop" class="db-backdrop" onclick="Dashboard.closeActiveDrawer()"></div>
+
+<!-- Drawer 1: Overview -->
+<div id="drawer-overview" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Overview Statistics</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderOverview(data.overview)}
+  </div>
+</div>
+
+<!-- Drawer 2: Zone Progress -->
+<div id="drawer-zone" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Zone Submission Progress</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderZones(data.zones)}
+  </div>
+</div>
+
+<!-- Drawer 3: School Status -->
+<div id="drawer-school" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">School Status & Submissions</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderSchoolList(data.schoolList)}
+  </div>
+</div>
+
+<!-- Drawer 4: Recent Feed -->
+<div id="drawer-feed" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Recent Submissions Feed</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderFeed(data.recentFeed)}
+  </div>
+</div>
+
+<!-- Drawer 5: Category Coverage -->
+<div id="drawer-coverage" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Category Coverage by Zone</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderCoverage(data.coverage)}
+  </div>
+</div>
+
+<!-- Drawer 6: Skills Tracker -->
+<div id="drawer-skills" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Technical Skills Tracker</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderSkills(data.skills)}
+  </div>
+</div>
+
+<!-- Drawer 7: Admin Panel (Corrections, Organiser Mgmt, Deadline Mgmt) -->
+<div id="drawer-admin" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Admin Panel</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderCorrections(corrections)}
+    ${renderOrganiserMgmt()}
+    ${renderDeadlineMgmt()}
+  </div>
+</div>
+
+<!-- Drawer 8: Actions & Settings -->
+<div id="drawer-settings" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Quick Actions & Settings</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderActions(data)}
+  </div>
+</div>
+
+<!-- Deletion Confirmation Drawer -->
+<div id="drawer-delete-confirm" class="bottom-drawer">
+  <div class="drawer-header" style="background:#e74c3c;color:#fff">
+    <span class="drawer-title">Confirm Deletion</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeDeleteDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body" style="padding:16px">
+    <div style="margin-bottom:12px; font-size:14px; color:#555;">
+      Are you sure you want to delete the following submission? This action is permanent and will remove the record from the database.
+    </div>
+    <div class="delete-sub-details" style="background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:16px; border-left:4px solid #e74c3c; font-size:13px; line-height:1.6;">
+      <div><strong>Ref#:</strong> <span id="del-ref" style="font-family:monospace; font-weight:bold;"></span></div>
+      <div><strong>Participant:</strong> <span id="del-participant" style="font-weight:bold;"></span></div>
+      <div><strong>School:</strong> <span id="del-school" style="font-weight:bold;"></span></div>
+      <div><strong>Category:</strong> <span id="del-category" style="font-weight:bold;"></span></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-weight:bold; margin-bottom:6px; font-size:13px; color:#333;">Reason for Deletion *</label>
+      <textarea id="del-reason" style="width:100%; height:80px; padding:10px; border:1.5px solid #ccc; border-radius:6px; font-family:inherit; resize:none; outline:none; font-size:13px;" placeholder="Please type a detailed reason for this deletion (required)"></textarea>
+    </div>
+    <div style="display:flex; gap:12px;">
+      <button id="btn-confirm-delete" class="db-action-btn db-action-primary" style="background:#e74c3c; flex:1; box-shadow:none; padding:12px; font-size:13px;">DELETE NOW</button>
+      <button id="btn-cancel-delete" class="db-action-btn db-action-outline" style="flex:1; border-color:#ccc; color:#555; padding:12px; font-size:13px;" onclick="Dashboard.closeDeleteDrawer()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Global Overlay Loader -->
+<div id="db-global-loader" class="db-global-loader hidden">
+  <div class="db-spinner"></div>
+  <div class="db-loader-text">Fetching latest data...</div>
+</div>
+`;
 
     bindSchoolSearch();
     bindZoneToggles();
     bindSchoolRows();
     bindCorrectionButtons();
+    bindDeadlineMgmt();
+
+    // Bind the delete buttons in Recent Feed
+    document.querySelectorAll('.btn-feed-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const d = btn.dataset;
+        promptDelete(d.ref, d.participant, d.school, d.category);
+      });
+    });
+
+    // Re-active active drawer if it was set
+    if (_activeDrawerId) {
+      const drawer = document.getElementById('drawer-' + _activeDrawerId);
+      const backdrop = document.getElementById('db-backdrop');
+      if (drawer && backdrop) {
+        drawer.classList.add('active');
+        backdrop.classList.add('active');
+      }
+    }
+
+    // Load organisers async after DOM is ready
+    loadOrganisers();
   }
 
   // ── Section 0: Pending Corrections ───────────────────────────
@@ -229,7 +453,7 @@ ${renderActions(data)}`;
 ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
     return `
-<div class="db-section db-section-corrections">
+<div class="db-section db-section-corrections" style="margin-bottom: 24px;">
   <div class="db-section-title">Pending Corrections ${badge}</div>
   <div class="db-corr-body">
     ${pendingCards}
@@ -288,17 +512,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
         btn.textContent = decision === 'Approved' ? 'Approving…' : 'Rejecting…';
 
         try {
-          const res = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-              action:    'handleCorrectionDecision',
-              phone:     _auth.phone,
-              requestId: requestId,
-              decision:  decision,
-            }),
-          });
-          if (!res.ok) throw new Error('Server error ' + res.status);
-          const data = await res.json();
+          const data = await FirestoreDB.handleCorrectionDecision(requestId, decision, _auth.organiserName);
           if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
 
           // Refresh the dashboard to show updated state
@@ -355,7 +569,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     <span class="db-zone-name">${z.name} Zone</span>
     <span class="db-badge ${badgeClass}">${z.status}</span>
   </div>
-  <div class="db-zone-coord">&#128101; ${esc(z.coordinator)} &nbsp;&bull;&nbsp; ${z.phone}</div>
+  <div class="db-zone-coord">${esc(z.coordinator)} &nbsp;&bull;&nbsp; ${z.phone}</div>
   <div class="db-zone-prog-row">
     <div class="db-zone-track"><div class="db-zone-fill ${fillClass}" style="width:${z.pct}%"></div></div>
     <span class="db-zone-count">${z.submitted} / ${z.max}</span>
@@ -380,7 +594,7 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 <div class="db-section">
   <div class="db-section-title">School Status (42 schools)</div>
   <div class="db-school-filters">
-    <input type="search" id="db-school-search" class="db-school-search" placeholder="&#128269; Search schools&hellip;">
+    <input type="search" id="db-school-search" class="db-school-search" placeholder="Search schools&hellip;">
     <select id="db-zone-filter" class="db-zone-filter">
       <option value="">All Zones</option>
       ${ZONE_NAMES.map(z => `<option value="${z}">${z}</option>`).join('')}
@@ -422,11 +636,6 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
         ? '<span class="db-feed-source-badge db-src-zone">ZONE</span>'
         : '<span class="db-feed-source-badge db-src-school">SCHOOL</span>';
       return `
-<div class="db-feed-item">
-  <div class="db-feed-time">${fmtTimeShort(f.time)}<br><span style="font-size:10px;color:#bbb">${fmtDate(f.time)}</span></div>
-  <div>
-    <div class="db-feed-school">${esc(f.school)}${srcBadge}</div>
-    <div class="db-feed-meta">${esc(f.participant)} &mdash; ${esc(f.type)}</div>
     <div class="db-feed-ref">${esc(f.category)} &nbsp;&bull;&nbsp; ${esc(f.ref)}</div>
   </div>
 </div>`;
@@ -511,16 +720,16 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
   <div class="db-section-title">Quick Actions</div>
   <div class="db-actions-body">
     <a href="${exp}" target="_blank" rel="noopener" class="db-action-btn db-action-primary">
-      &#128190; Export All to Excel
+      Export All to Excel
     </a>
     <a href="${expS}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
-      &#128203; Export School Submissions
+      Export School Submissions
     </a>
     <a href="${expZ}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
-      &#128203; Export Zone Submissions
+      Export Zone Submissions
     </a>
     <a href="${drive}" target="_blank" rel="noopener" class="db-action-btn db-action-outline">
-      &#128449; View Drive Files
+      View Drive Files
     </a>
   </div>
 </div>`;
@@ -656,11 +865,713 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     return map[type] || type;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ORGANISER MANAGEMENT
+  // ══════════════════════════════════════════════════════════════
+
+  const SCHOOL_TYPES = [
+    'Primary School', 'Secondary School', 'Open Centre School',
+    'Private School', 'Community School', 'DEC',
+  ];
+  const ALL_ZONES_ORG = ['DISTRICT', ...ZONE_NAMES];
+
+  function renderOrganiserMgmt() {
+    const zoneOpts = ALL_ZONES_ORG.map(z => `<option value="${z}">${z}</option>`).join('');
+    const typeOpts = SCHOOL_TYPES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    return `
+<div class="db-section db-section-org" id="db-org-section">
+  <div class="db-section-title">Organiser Management</div>
+
+  <div class="db-org-controls">
+    <input type="search" id="db-org-search" class="db-org-input db-org-search"
+           placeholder="Search name, phone or zone&hellip;">
+    <select id="db-org-zone-filter" class="db-org-input db-org-filter-sel">
+      <option value="">All Zones</option>
+      ${zoneOpts}
+    </select>
+    <select id="db-org-role-filter" class="db-org-input db-org-filter-sel">
+      <option value="">All Roles</option>
+      <option value="School">School</option>
+      <option value="Zone">Zone</option>
+      <option value="District">District</option>
+    </select>
+    <button id="db-org-add-btn" class="db-org-add-btn">+ ADD NEW ORGANISER</button>
+  </div>
+
+  <div id="db-org-form-panel" class="db-org-form-panel hidden">
+    <div class="db-org-form-header">
+      <span id="db-org-form-title" class="db-org-form-title-text">Add New Organiser</span>
+    </div>
+    <div class="db-org-form-grid">
+      <label class="db-org-label">Zone *
+        <select id="db-org-f-zone" class="db-org-input">
+          <option value="">-- Select Zone --</option>${zoneOpts}
+        </select>
+      </label>
+      <label class="db-org-label">School Name *
+        <input type="text" id="db-org-f-name" class="db-org-input" placeholder="e.g. Mpumba Primary">
+      </label>
+      <label class="db-org-label">School Type *
+        <select id="db-org-f-type" class="db-org-input">
+          <option value="">-- Select Type --</option>${typeOpts}
+        </select>
+      </label>
+      <label class="db-org-label">Organiser Name *
+        <input type="text" id="db-org-f-organiser" class="db-org-input" placeholder="Full name">
+      </label>
+      <label class="db-org-label">Phone Number *
+        <input type="tel" id="db-org-f-phone" class="db-org-input" placeholder="e.g. 0971234567">
+      </label>
+      <label class="db-org-label">Role *
+        <select id="db-org-f-role" class="db-org-input">
+          <option value="School">School</option>
+          <option value="Zone">Zone</option>
+          <option value="District">District</option>
+        </select>
+      </label>
+      <label class="db-org-label">Status
+        <select id="db-org-f-status" class="db-org-input">
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </label>
+    </div>
+    <div class="db-org-form-btns">
+      <button id="db-org-f-save" class="db-org-f-save">Save</button>
+      <button id="db-org-f-cancel" class="db-org-f-cancel">Cancel</button>
+    </div>
+    <div id="db-org-form-msg" class="db-org-form-msg hidden"></div>
+  </div>
+
+  <div class="db-org-table-outer">
+    <div id="db-org-loading" class="db-org-loading">Loading organisers&hellip;</div>
+    <div class="db-org-table-scroll hidden" id="db-org-table-wrap">
+      <table class="db-org-table" id="db-org-table">
+        <thead>
+          <tr>
+            <th>Zone</th><th>School</th><th>Type</th>
+            <th>Name</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="db-org-tbody"></tbody>
+      </table>
+    </div>
+    <div id="db-org-count" class="db-org-count hidden"></div>
+  </div>
+
+  <div class="db-org-pending-section" id="db-org-pending-section">
+    <div class="db-org-pending-title">Pending / Inactive &mdash; Quick Activate</div>
+    <div id="db-org-pending-list" class="db-org-pending-list">
+      <div class="db-org-loading">Loading&hellip;</div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  // ── Load organisers ───────────────────────────────────────────
+  async function loadOrganisers() {
+    const loadEl = document.getElementById('db-org-loading');
+    const wrap   = document.getElementById('db-org-table-wrap');
+    if (!loadEl) return;
+
+    try {
+      const data = await FirestoreDB.adminGetAllOrganisers();
+      if (data.status !== 'ok') throw new Error(data.message || 'Load failed.');
+
+      _organisers = data.records || [];
+      populateOrganiserTable(_organisers);
+      bindOrgTableEvents();
+      bindOrgFormEvents();
+      bindOrgFilterEvents();
+
+    } catch (err) {
+      if (loadEl) loadEl.innerHTML =
+        `<div class="db-org-error">&#9888; Could not load organisers: ${esc(err.message)}
+         <button class="db-org-retry-btn" onclick="Dashboard._reloadOrg()">Retry</button></div>`;
+    }
+  }
+
+  function populateOrganiserTable(list) {
+    const loadEl  = document.getElementById('db-org-loading');
+    const wrap    = document.getElementById('db-org-table-wrap');
+    const tbody   = document.getElementById('db-org-tbody');
+    const countEl = document.getElementById('db-org-count');
+    if (!tbody) return;
+
+    if (loadEl) loadEl.classList.add('hidden');
+    if (wrap)   wrap.classList.remove('hidden');
+
+    tbody.innerHTML = list.map(o => orgRow(o)).join('');
+
+    if (countEl) {
+      countEl.classList.remove('hidden');
+      countEl.textContent = `${list.length} record${list.length !== 1 ? 's' : ''}`;
+    }
+
+    // Pending section
+    const pending = list.filter(o => o.status === 'Inactive' || o.phone === 'PENDING');
+    const pendEl  = document.getElementById('db-org-pending-list');
+    if (pendEl) {
+      if (pending.length === 0) {
+        pendEl.innerHTML = '<div class="db-org-pending-none">No pending schools. All active.</div>';
+      } else {
+        pendEl.innerHTML = pending.map(o => `
+<div class="db-org-pending-card">
+  <div class="db-org-pending-info">
+    <strong>${esc(o.organiser !== 'PENDING' ? o.organiser : o.name)}</strong>
+    <span>${esc(o.zone)} &bull; ${esc(o.name)} &bull; ${esc(o.role)}</span>
+    <span class="db-org-pend-phone">${esc(o.phone)}</span>
+  </div>
+  <button class="db-org-activate-btn"
+          data-zone="${esc(o.zone)}" data-name="${esc(o.name)}"
+          data-role="${esc(o.role)}" data-phone="${esc(o.phone)}">
+    ACTIVATE
+  </button>
+</div>`).join('');
+
+        document.querySelectorAll('.db-org-activate-btn').forEach(btn => {
+          btn.addEventListener('click', () => orgQuickActivate(btn));
+        });
+      }
+    }
+  }
+
+  function orgRow(o) {
+    const statusCls  = o.status === 'Active' ? 'db-org-status-active' : 'db-org-status-inactive';
+    const toggleLbl  = o.status === 'Active' ? 'DEACTIVATE' : 'ACTIVATE';
+    const toggleCls  = o.status === 'Active' ? 'db-org-deactivate-btn' : 'db-org-do-activate-btn';
+    const newStatus  = o.status === 'Active' ? 'Inactive' : 'Active';
+    return `
+<tr class="db-org-row" data-zone="${esc(o.zone)}" data-name="${esc(o.name).toLowerCase()}"
+    data-role="${esc(o.role)}" data-filter-zone="${esc(o.zone)}" data-filter-role="${esc(o.role)}">
+  <td>${esc(o.zone)}</td>
+  <td>${esc(o.name)}</td>
+  <td>${esc(shortType(o.type))}</td>
+  <td>${esc(o.organiser)}</td>
+  <td>${esc(o.phone)}</td>
+  <td><span class="db-org-role-badge db-org-role-${o.role.toLowerCase()}">${esc(o.role)}</span></td>
+  <td><span class="${statusCls}">${esc(o.status)}</span></td>
+  <td class="db-org-actions-cell">
+    <button class="db-org-edit-btn"
+            data-zone="${esc(o.zone)}" data-name="${esc(o.name)}" data-type="${esc(o.type)}"
+            data-organiser="${esc(o.organiser)}" data-phone="${esc(o.phone)}"
+            data-role="${esc(o.role)}" data-status="${esc(o.status)}">EDIT</button>
+    <button class="${toggleCls} db-org-toggle-btn"
+            data-zone="${esc(o.zone)}" data-name="${esc(o.name)}"
+            data-role="${esc(o.role)}" data-phone="${esc(o.phone)}"
+            data-new-status="${newStatus}">${toggleLbl}</button>
+    <button class="db-org-delete-btn"
+            data-zone="${esc(o.zone)}" data-name="${esc(o.name)}"
+            data-role="${esc(o.role)}" data-phone="${esc(o.phone)}"
+            data-organiser="${esc(o.organiser)}">DELETE</button>
+  </td>
+</tr>`;
+  }
+
+  function bindOrgTableEvents() {
+    document.querySelectorAll('.db-org-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => orgOpenEditForm(btn.dataset));
+    });
+    document.querySelectorAll('.db-org-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => orgToggleStatus(btn));
+    });
+    document.querySelectorAll('.db-org-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => orgConfirmDelete(btn));
+    });
+  }
+
+  function bindOrgFormEvents() {
+    const addBtn    = document.getElementById('db-org-add-btn');
+    const saveBtn   = document.getElementById('db-org-f-save');
+    const cancelBtn = document.getElementById('db-org-f-cancel');
+    if (addBtn)    addBtn.addEventListener('click', orgOpenAddForm);
+    if (saveBtn)   saveBtn.addEventListener('click', orgSave);
+    if (cancelBtn) cancelBtn.addEventListener('click', orgCloseForm);
+  }
+
+  function bindOrgFilterEvents() {
+    const search     = document.getElementById('db-org-search');
+    const zoneFilter = document.getElementById('db-org-zone-filter');
+    const roleFilter = document.getElementById('db-org-role-filter');
+    const applyFilter = () => {
+      const q    = (search ? search.value : '').toLowerCase().trim();
+      const zone = zoneFilter ? zoneFilter.value : '';
+      const role = roleFilter ? roleFilter.value : '';
+      let count  = 0;
+      document.querySelectorAll('#db-org-tbody .db-org-row').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const show = (!q    || text.includes(q)) &&
+                     (!zone || row.dataset.filterZone === zone) &&
+                     (!role || row.dataset.filterRole === role);
+        row.style.display = show ? '' : 'none';
+        if (show) count++;
+      });
+      const countEl = document.getElementById('db-org-count');
+      if (countEl) countEl.textContent = `${count} record${count !== 1 ? 's' : ''} shown`;
+    };
+    if (search)     search.addEventListener('input', applyFilter);
+    if (zoneFilter) zoneFilter.addEventListener('change', applyFilter);
+    if (roleFilter) roleFilter.addEventListener('change', applyFilter);
+  }
+
+  function orgOpenAddForm() {
+    _orgEditTarget = null;
+    const panel = document.getElementById('db-org-form-panel');
+    const title = document.getElementById('db-org-form-title');
+    if (!panel) return;
+    if (title) title.textContent = 'Add New Organiser';
+    orgClearForm();
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function orgOpenEditForm(d) {
+    _orgEditTarget = { zone: d.zone, name: d.name, role: d.role, phone: d.phone };
+    const panel = document.getElementById('db-org-form-panel');
+    const title = document.getElementById('db-org-form-title');
+    if (!panel) return;
+    if (title) title.textContent = 'Edit Organiser';
+    document.getElementById('db-org-f-zone').value      = d.zone      || '';
+    document.getElementById('db-org-f-name').value      = d.name      || '';
+    document.getElementById('db-org-f-type').value      = d.type      || '';
+    document.getElementById('db-org-f-organiser').value = d.organiser || '';
+    document.getElementById('db-org-f-phone').value     = d.phone     || '';
+    document.getElementById('db-org-f-role').value      = d.role      || 'School';
+    document.getElementById('db-org-f-status').value    = d.status    || 'Active';
+    orgHideMsg();
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function orgCloseForm() {
+    const panel = document.getElementById('db-org-form-panel');
+    if (panel) panel.classList.add('hidden');
+    _orgEditTarget = null;
+  }
+
+  function orgClearForm() {
+    ['db-org-f-zone','db-org-f-name','db-org-f-type','db-org-f-organiser','db-org-f-phone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const roleEl   = document.getElementById('db-org-f-role');
+    const statusEl = document.getElementById('db-org-f-status');
+    if (roleEl)   roleEl.value   = 'School';
+    if (statusEl) statusEl.value = 'Active';
+    orgHideMsg();
+  }
+
+  async function orgSave() {
+    const saveBtn = document.getElementById('db-org-f-save');
+    const zone      = document.getElementById('db-org-f-zone').value.trim();
+    const name      = document.getElementById('db-org-f-name').value.trim();
+    const type      = document.getElementById('db-org-f-type').value.trim();
+    const organiser = document.getElementById('db-org-f-organiser').value.trim();
+    const phone     = document.getElementById('db-org-f-phone').value.trim();
+    const role      = document.getElementById('db-org-f-role').value.trim();
+    const status    = document.getElementById('db-org-f-status').value.trim();
+
+    if (!zone || !name || !type || !organiser || !phone || !role) {
+      orgShowMsg('error', 'All fields marked * are required.');
+      return;
+    }
+
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+
+    try {
+      const record = { zone, name, type, organiser, phone, role, status };
+      let data;
+      if (_orgEditTarget) {
+        data = await FirestoreDB.adminUpdateOrganiser(_orgEditTarget.phone, record);
+      } else {
+        data = await FirestoreDB.adminAddOrganiser(record);
+      }
+      if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
+
+      orgShowMsg('ok', _orgEditTarget ? 'Organiser updated.' : 'Organiser added.');
+      setTimeout(() => { orgCloseForm(); loadOrganisers(); }, 800);
+
+    } catch (err) {
+      orgShowMsg('error', err.message);
+    } finally {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save';
+    }
+  }
+
+  async function orgToggleStatus(btn) {
+    const newStatus = btn.dataset.newStatus;
+    const label     = newStatus === 'Active' ? 'Activating…' : 'Deactivating…';
+    btn.disabled    = true;
+    btn.textContent = label;
+
+    try {
+      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, newStatus);
+      if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
+      loadOrganisers();
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled    = false;
+      btn.textContent = newStatus === 'Active' ? 'ACTIVATE' : 'DEACTIVATE';
+    }
+  }
+
+  async function orgQuickActivate(btn) {
+    btn.disabled    = true;
+    btn.textContent = 'Activating…';
+    try {
+      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, 'Active');
+      if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
+      loadOrganisers();
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled    = false;
+      btn.textContent = 'ACTIVATE';
+    }
+  }
+
+  function orgConfirmDelete(btn) {
+    const name      = btn.dataset.name;
+    const organiser = btn.dataset.organiser;
+    // Inline confirm — replace the actions cell with a confirm row
+    const row = btn.closest('tr');
+    if (!row) return;
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('db-org-confirm-row')) {
+      existing.remove();
+      return;
+    }
+    const cols = row.querySelectorAll('td').length;
+    const confirmRow = document.createElement('tr');
+    confirmRow.className = 'db-org-confirm-row';
+    confirmRow.innerHTML = `
+<td colspan="${cols}" class="db-org-confirm-cell">
+  <div class="db-org-confirm-box">
+    <span>Delete <strong>${esc(organiser)}</strong> (${esc(name)})?
+      Their past submissions will remain safe. This cannot be undone.</span>
+    <div class="db-org-confirm-btns">
+      <button class="db-org-confirm-yes"
+              data-zone="${btn.dataset.zone}" data-name="${btn.dataset.name}"
+              data-role="${btn.dataset.role}" data-phone="${btn.dataset.phone}">
+        DELETE CONFIRM
+      </button>
+      <button class="db-org-confirm-no">CANCEL</button>
+    </div>
+  </div>
+</td>`;
+    row.parentNode.insertBefore(confirmRow, row.nextSibling);
+
+    confirmRow.querySelector('.db-org-confirm-yes').addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.disabled    = true;
+      b.textContent = 'Deleting…';
+      try {
+        const data = await FirestoreDB.adminDeleteOrganiser(b.dataset.phone);
+        if (data.status !== 'ok') throw new Error(data.message || 'Delete failed.');
+        confirmRow.remove();
+        loadOrganisers();
+      } catch (err) {
+        alert('Error: ' + err.message);
+        b.disabled    = false;
+        b.textContent = 'DELETE CONFIRM';
+      }
+    });
+
+    confirmRow.querySelector('.db-org-confirm-no').addEventListener('click', () => {
+      confirmRow.remove();
+    });
+  }
+
+  function orgShowMsg(type, msg) {
+    const el = document.getElementById('db-org-form-msg');
+    if (!el) return;
+    el.className = type === 'ok' ? 'db-org-form-msg db-org-msg-ok' : 'db-org-form-msg db-org-msg-err';
+    el.textContent = msg;
+  }
+
+  function orgHideMsg() {
+    const el = document.getElementById('db-org-form-msg');
+    if (el) el.className = 'db-org-form-msg hidden';
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // DEADLINE MANAGEMENT
+  // ══════════════════════════════════════════════════════════════
+
+  function renderDeadlineMgmt() {
+    const dl  = (typeof App !== 'undefined') ? App.deadlines : {};
+    const fmt = iso => {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return d.getDate() + ' ' + mo[d.getMonth()] + ' ' + d.getFullYear() +
+             ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    };
+    return `
+<div class="db-section db-section-deadlines" id="db-dl-section">
+  <div class="db-section-title">Deadline Management</div>
+
+  <div class="db-dl-current">
+    <div class="db-dl-row">
+      <span class="db-dl-lbl">School open:</span>
+      <span class="db-dl-val" id="db-dl-show-school-open">${fmt(dl.School_Open)}</span>
+    </div>
+    <div class="db-dl-row">
+      <span class="db-dl-lbl">School close:</span>
+      <span class="db-dl-val" id="db-dl-show-school-close">${fmt(dl.School_Close)}</span>
+    </div>
+    <div class="db-dl-row">
+      <span class="db-dl-lbl">Zone open:</span>
+      <span class="db-dl-val" id="db-dl-show-zone-open">${fmt(dl.Zone_Open)}</span>
+    </div>
+    <div class="db-dl-row">
+      <span class="db-dl-lbl">Zone close:</span>
+      <span class="db-dl-val" id="db-dl-show-zone-close">${fmt(dl.Zone_Close)}</span>
+    </div>
+  </div>
+
+  <div class="db-dl-btns">
+    <button class="db-dl-btn db-dl-btn-extend" id="db-dl-btn-extend-school">
+      Extend School Deadline
+    </button>
+    <button class="db-dl-btn db-dl-btn-extend" id="db-dl-btn-extend-zone">
+      Extend Zone Deadline
+    </button>
+    <button class="db-dl-btn db-dl-btn-reset" id="db-dl-btn-reset">
+      Reset to Original Dates
+    </button>
+    <button class="db-dl-btn db-dl-btn-close-now" id="db-dl-btn-close-now">
+      Close Submissions Now
+    </button>
+    <button class="db-dl-btn db-dl-btn-reopen" id="db-dl-btn-reopen">
+      Reopen Submissions
+    </button>
+  </div>
+
+  <div id="db-dl-form-panel" class="db-dl-form-panel hidden">
+    <div class="db-dl-form-title" id="db-dl-form-title">Extend Deadline</div>
+    <div class="db-dl-form-grid">
+      <label class="db-org-label" id="db-dl-f-school-open-wrap">School Open
+        <input type="datetime-local" id="db-dl-f-school-open" class="db-org-input">
+      </label>
+      <label class="db-org-label">School Close *
+        <input type="datetime-local" id="db-dl-f-school-close" class="db-org-input">
+      </label>
+      <label class="db-org-label" id="db-dl-f-zone-open-wrap">Zone Open *
+        <input type="datetime-local" id="db-dl-f-zone-open" class="db-org-input">
+      </label>
+      <label class="db-org-label">Zone Close *
+        <input type="datetime-local" id="db-dl-f-zone-close" class="db-org-input">
+      </label>
+    </div>
+    <div class="db-org-form-btns">
+      <button id="db-dl-f-save" class="db-org-f-save">Save Deadlines</button>
+      <button id="db-dl-f-cancel" class="db-org-f-cancel">Cancel</button>
+    </div>
+    <div id="db-dl-form-msg" class="db-org-form-msg hidden"></div>
+  </div>
+
+  <div id="db-dl-msg" class="db-org-form-msg hidden"></div>
+</div>`;
+  }
+
+  function bindDeadlineMgmt() {
+    // Helpers
+    const dlFormPanel = () => document.getElementById('db-dl-form-panel');
+    const dlFormMsg   = () => document.getElementById('db-dl-form-msg');
+    const dlMsg       = () => document.getElementById('db-dl-msg');
+
+    function dlShowMsg(el, type, msg) {
+      if (!el) return;
+      el.className   = type === 'ok' ? 'db-org-form-msg db-org-msg-ok' : 'db-org-form-msg db-org-msg-err';
+      el.textContent = msg;
+    }
+
+    function isoToLocal(iso) {
+      if (!iso) return '';
+      return iso.slice(0, 16);
+    }
+
+    function openForm(mode) {
+      const panel = dlFormPanel();
+      if (!panel) return;
+      const dl = App.deadlines;
+      const titleEl = document.getElementById('db-dl-form-title');
+
+      const soWrap  = document.getElementById('db-dl-f-school-open-wrap');
+      const zoWrap  = document.getElementById('db-dl-f-zone-open-wrap');
+
+      if (mode === 'extend-school') {
+        if (titleEl) titleEl.textContent = 'Extend School Deadline';
+        if (soWrap)  soWrap.style.display  = 'none';
+        if (zoWrap)  zoWrap.style.display  = 'none';
+        document.getElementById('db-dl-f-school-close').value = isoToLocal(dl.School_Close);
+        document.getElementById('db-dl-f-zone-open').value    = isoToLocal(dl.Zone_Open);
+        document.getElementById('db-dl-f-zone-close').value   = isoToLocal(dl.Zone_Close);
+        document.getElementById('db-dl-f-school-open').value  = isoToLocal(dl.School_Open);
+
+      } else if (mode === 'extend-zone') {
+        if (titleEl) titleEl.textContent = 'Extend Zone Deadline';
+        if (soWrap)  soWrap.style.display  = 'none';
+        if (zoWrap)  zoWrap.style.display  = 'none';
+        document.getElementById('db-dl-f-school-close').value = isoToLocal(dl.School_Close);
+        document.getElementById('db-dl-f-zone-open').value    = isoToLocal(dl.Zone_Open);
+        document.getElementById('db-dl-f-zone-close').value   = isoToLocal(dl.Zone_Close);
+        document.getElementById('db-dl-f-school-open').value  = isoToLocal(dl.School_Open);
+
+      } else if (mode === 'reopen') {
+        if (titleEl) titleEl.textContent = 'Reopen Submissions — Set New Dates';
+        if (soWrap)  soWrap.style.display  = '';
+        if (zoWrap)  zoWrap.style.display  = '';
+        document.getElementById('db-dl-f-school-open').value  = isoToLocal(dl.School_Open);
+        document.getElementById('db-dl-f-school-close').value = isoToLocal(dl.School_Close);
+        document.getElementById('db-dl-f-zone-open').value    = isoToLocal(dl.Zone_Open);
+        document.getElementById('db-dl-f-zone-close').value   = isoToLocal(dl.Zone_Close);
+      }
+
+      const msgEl = dlFormMsg();
+      if (msgEl) msgEl.className = 'db-org-form-msg hidden';
+      panel.classList.remove('hidden');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function dlSave() {
+      const saveBtn = document.getElementById('db-dl-f-save');
+      const sc = document.getElementById('db-dl-f-school-close').value;
+      const so = document.getElementById('db-dl-f-school-open').value;
+      const zo = document.getElementById('db-dl-f-zone-open').value;
+      const zc = document.getElementById('db-dl-f-zone-close').value;
+
+      if (!sc || !zc) {
+        dlShowMsg(dlFormMsg(), 'err', 'School Close and Zone Close are required.');
+        return;
+      }
+
+      saveBtn.disabled    = true;
+      saveBtn.textContent = 'Saving…';
+
+      try {
+        const dlPayload = {
+          School_Open:  so || App.deadlines.School_Open,
+          School_Close: sc,
+          Zone_Open:    zo || App.deadlines.Zone_Open,
+          Zone_Close:   zc,
+        };
+        const data = await FirestoreDB.saveDeadlines(dlPayload);
+        if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
+
+        App.setDeadlines(dlPayload);
+        dlShowMsg(dlFormMsg(), 'ok', 'Deadlines saved. Countdown updated immediately.');
+        updateDeadlineDisplay(dlPayload);
+        setTimeout(() => {
+          const p = dlFormPanel();
+          if (p) p.classList.add('hidden');
+        }, 1200);
+
+      } catch (err) {
+        dlShowMsg(dlFormMsg(), 'err', err.message);
+      } finally {
+        saveBtn.disabled    = false;
+        saveBtn.textContent = 'Save Deadlines';
+      }
+    }
+
+    async function dlReset() {
+      const ok = confirm(
+        'Reset all deadlines to original dates?\n\n' +
+        'School: 26–30 May 2026\n' +
+        'Zone: 1–5 June 2026\n\n' +
+        'Confirm?'
+      );
+      if (!ok) return;
+
+      const msg = dlMsg();
+      if (msg) { msg.className = 'db-org-form-msg'; msg.textContent = 'Resetting…'; }
+
+      try {
+        const defaults = {
+          School_Open:  '2026-05-26T00:00:00',
+          School_Close: '2026-05-30T23:59:00',
+          Zone_Open:    '2026-06-01T00:00:00',
+          Zone_Close:   '2026-06-05T23:59:00',
+        };
+        const data = await FirestoreDB.saveDeadlines(defaults);
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
+        App.setDeadlines(defaults);
+        updateDeadlineDisplay(defaults);
+        if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Deadlines reset to original.'; }
+      } catch (err) {
+        if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
+      }
+    }
+
+    async function dlCloseNow() {
+      const ok = confirm(
+        'Close all submissions right now?\n\n' +
+        'This will prevent any new submissions from school and zone coordinators.\n\n' +
+        'Close Now?'
+      );
+      if (!ok) return;
+
+      const now  = new Date();
+      const nowS = now.toISOString().slice(0, 16);
+      const msg  = dlMsg();
+      if (msg) { msg.className = 'db-org-form-msg'; msg.textContent = 'Closing…'; }
+
+      try {
+        const closedDl = {
+          School_Open:  App.deadlines.School_Open,
+          School_Close: nowS,
+          Zone_Open:    App.deadlines.Zone_Open,
+          Zone_Close:   nowS,
+        };
+        const data = await FirestoreDB.saveDeadlines(closedDl);
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
+        App.setDeadlines(closedDl);
+        updateDeadlineDisplay(closedDl);
+        if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Submissions closed.'; }
+      } catch (err) {
+        if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
+      }
+    }
+
+    function updateDeadlineDisplay(dl) {
+      const fmt = iso => {
+        const d = new Date(iso);
+        const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return d.getDate() + ' ' + mo[d.getMonth()] + ' ' + d.getFullYear() +
+               ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      };
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = fmt(v); };
+      set('db-dl-show-school-open',  dl.School_Open);
+      set('db-dl-show-school-close', dl.School_Close);
+      set('db-dl-show-zone-open',    dl.Zone_Open);
+      set('db-dl-show-zone-close',   dl.Zone_Close);
+    }
+
+    // Bind button events
+    const el = id => document.getElementById(id);
+    const on = (id, fn) => { const e = el(id); if (e) e.addEventListener('click', fn); };
+
+    on('db-dl-btn-extend-school', () => openForm('extend-school'));
+    on('db-dl-btn-extend-zone',   () => openForm('extend-zone'));
+    on('db-dl-btn-reopen',        () => openForm('reopen'));
+    on('db-dl-f-save',            dlSave);
+    on('db-dl-f-cancel',          () => { const p = dlFormPanel(); if (p) p.classList.add('hidden'); });
+    on('db-dl-btn-reset',         dlReset);
+    on('db-dl-btn-close-now',     dlCloseNow);
+  }
+
   // ── Public API ────────────────────────────────────────────────
   return {
     render,
     destroy,
+    openDrawer,
+    closeActiveDrawer,
+    closeDeleteDrawer,
     _manualRefresh: () => loadFullData(true),
+    _reloadOrg:     () => loadOrganisers(),
   };
 
 })();

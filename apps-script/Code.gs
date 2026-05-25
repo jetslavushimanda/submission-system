@@ -22,12 +22,24 @@
 var SHEET_ID        = PropertiesService.getScriptProperties().getProperty('SHEET_ID')        || 'YOUR_GOOGLE_SHEET_ID_HERE';
 var DRIVE_FOLDER_ID = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID') || 'YOUR_DRIVE_FOLDER_ID_HERE';
 
+var ss;
+try {
+  ss = SpreadsheetApp.openById(SHEET_ID);
+} catch (e) {
+  Logger.log("Spreadsheet not loaded yet or invalid SHEET_ID. Safe to ignore during initial setupSystem() run.");
+}
+
+function getSpreadsheet_() {
+  return ss;
+}
+
 // Sheet tab names — must match the actual tab names exactly.
 const TAB_REGISTERED  = "Registered Schools";   // Tab 1
 const TAB_SCHOOL_SUB  = "School Submissions";   // Tab 2
 const TAB_ZONE_SUB    = "Zone Submissions";     // Tab 3
 const TAB_DASHBOARD   = "District Dashboard";   // Tab 4
 const TAB_CORRECTIONS = "Correction Requests";  // Tab 5
+const TAB_SETTINGS     = "Settings";             // Tab 6
 
 // ── doGet ─────────────────────────────────────────────────────
 // Health-check: paste the web app URL in a browser to confirm
@@ -49,11 +61,11 @@ function doGet(e) {
 // Every response goes through the same JSON/MIME path so CORS
 // headers are applied uniformly.
 function doPost(e) {
-  var result;
-
+  var response;
   try {
     var payload = JSON.parse(e.postData.contents);
     var action  = payload.action;
+    var result;
 
     if (action === "checkAuth" || action === "checkRegistration") {
       // auth.gs — Tab 1 lookup by phone number.
@@ -79,6 +91,30 @@ function doPost(e) {
         };
       }
 
+    } else if (action === "getInitData") {
+      // FIX 6: Batch call — returns auth result + deadlines in a single round-trip.
+      // Replaces the separate checkAuth + getDeadlines calls on login.
+      var auth = checkRegistration(payload.phone);
+      if (auth.found === true) {
+        var dlResult = getDeadlines_();
+        result = {
+          status:        'found',
+          zone:          auth.zone,
+          schoolName:    auth.schoolName,
+          schoolType:    auth.schoolType,
+          organiserName: auth.organiserName,
+          phone:         auth.phone,
+          role:          auth.role,
+          deadlines:     (dlResult.status === 'ok' && dlResult.deadlines) ? dlResult.deadlines : {},
+        };
+      } else {
+        result = {
+          status:  'not_found',
+          reason:  auth.reason  || '',
+          message: auth.message || '',
+        };
+      }
+
     } else if (action === "submitSchool") {
       var authCheck = checkRegistration(payload.phone);
       if (!authCheck.found || (authCheck.role !== 'School' && authCheck.role !== 'District')) {
@@ -94,6 +130,15 @@ function doPost(e) {
         result = { status: 'error', message: 'Unauthorized. Access denied.' };
       } else {
         result = submitZoneParticipant(payload);
+        if (result.status === 'ok') updateDashboard_();
+      }
+
+    } else if (action === "adminDeleteSubmission") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminDeleteSubmission_(payload);
         if (result.status === 'ok') updateDashboard_();
       }
 
@@ -200,16 +245,70 @@ function doPost(e) {
         result = adminToggleStatus_(payload);
       }
 
+    } else if (action === "adminGetAllOrganisers") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminGetAllOrganisers_();
+      }
+
+    } else if (action === "adminUpdateOrganiser") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminUpdateOrganiser_(payload);
+      }
+
+    } else if (action === "adminDeleteOrganiser") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminDeleteOrganiser_(payload);
+      }
+
+    } else if (action === "getDeadlines") {
+      // No auth — every user reads deadlines on load
+      result = getDeadlines_();
+
+    } else if (action === "saveDeadlines") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = saveDeadlines_(payload);
+      }
+
+    } else if (action === "getProgressData") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        result = getProgressData_(payload, authCheck);
+      }
+
+    } else if (action === "uploadFile") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        var url = saveReportToDrive(payload.base64, payload.fileName, payload.mimeType);
+        result = { status: 'ok', url: url };
+      }
+
     } else {
       result = { status: "error", message: "Unknown action: " + action };
     }
 
-  } catch (err) {
-    result = { status: "error", message: "Server error: " + err.message };
+    response = result;
+  } catch (error) {
+    response = { status: 'error', success: false, error: error.message };
   }
 
   return ContentService
-    .createTextOutput(JSON.stringify(result))
+    .createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -585,6 +684,20 @@ function setupSystem() {
   tab5.setFrozenRows(1);
   tab5.autoResizeColumns(1, h5.length);
 
+  // ── Step 5c: Tab 6 — Settings (deadlines) ───────────────────
+  var tab6 = ss.insertSheet('Settings');
+  tab6.getRange(1, 1, 1, 3).setValues([['Key', 'Value', 'Description']]);
+  tab6.getRange(1, 1, 1, 3)
+    .setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
+  tab6.getRange(2, 1, 4, 3).setValues([
+    ['School_Open',  '2026-05-26T00:00:00', 'School submissions open'],
+    ['School_Close', '2026-05-30T23:59:00', 'School submissions close'],
+    ['Zone_Open',    '2026-06-01T00:00:00', 'Zone submissions open'],
+    ['Zone_Close',   '2026-06-05T23:59:00', 'Zone submissions close'],
+  ]);
+  tab6.setFrozenRows(1);
+  tab6.autoResizeColumns(1, 3);
+
   // ── Step 6: Create Drive folder tree ────────────────────────
   Logger.log('Creating Drive folders...');
   var mainFolder   = DriveApp.createFolder('JETS Lavushimanda 2024-2026');
@@ -875,9 +988,114 @@ function getWelcomeStats_(payload) {
   return result;
 }
 
+// ── getProgressData_ ──────────────────────────────────────────
+// Returns per-category innovation counts broken down by participant type
+// (Learner / Teacher / Youth) plus academics by subject+level and skills by category.
+// source='school' filters Tab 2 by phone; source='zone' filters Tab 3 by zone.
+function getProgressData_(payload, auth) {
+  var source = payload.source; // 'school' or 'zone'
+
+  var CAT_KEYS = [
+    'Agricultural Science Innovations',
+    'Chemistry Innovations',
+    'Physics & Renewable Energy Innovations',
+    'Computer Science & Software Development Innovations',
+    'Mathematics Innovations',
+    'Medicine & Health Innovations',
+    'Robotics & Artificial Intelligence Innovations',
+    'Food Science, Technology & Hospitality Innovations',
+    'Environmental Sustainable Development Innovations'
+  ];
+
+  var innov = { learner: {}, teacher: {}, youth: {} };
+  for (var ci = 0; ci < CAT_KEYS.length; ci++) {
+    innov.learner[CAT_KEYS[ci]] = 0;
+    innov.teacher[CAT_KEYS[ci]] = 0;
+    innov.youth[CAT_KEYS[ci]]   = 0;
+  }
+  var academics = 0, skills = 0, total = 0;
+  var academicsBySubjectLevel = {}; // key: "Level:Subject", value: count
+  var skillsByCategory = {};        // key: skill category name, value: count
+
+  if (source === 'school') {
+    var sheet = openSheet_(TAB_SCHOOL_SUB);
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0,
+               academicsBySubjectLevel: {}, skillsByCategory: {} };
+    }
+    var matchPhone = trim_(auth.phone);
+    var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (trim_(data[i][6]) !== matchPhone) continue; // col G = Phone
+      total++;
+      var pType = (data[i][7]  || '').toString();          // col H = Participant Type
+      var level = (data[i][8]  || '').toString().trim();   // col I = Level
+      var cat   = (data[i][13] || '').toString().trim();   // col N = Category
+      if (pType.indexOf('Technical Skills') !== -1) {
+        skills++;
+        if (cat) skillsByCategory[cat] = (skillsByCategory[cat] || 0) + 1;
+      } else if (pType.indexOf('Academics') !== -1 || pType.indexOf('Quiz') !== -1) {
+        academics++;
+        if (level && cat) {
+          var slKey = level + ':' + cat;
+          academicsBySubjectLevel[slKey] = (academicsBySubjectLevel[slKey] || 0) + 1;
+        }
+      } else if (pType === 'Teacher') {
+        if (cat && innov.teacher.hasOwnProperty(cat)) innov.teacher[cat]++;
+      } else if (pType.indexOf('Youth') !== -1 || pType.indexOf('Out-of-School') !== -1) {
+        if (cat && innov.youth.hasOwnProperty(cat)) innov.youth[cat]++;
+      } else {
+        if (cat && innov.learner.hasOwnProperty(cat)) innov.learner[cat]++;
+      }
+    }
+
+  } else if (source === 'zone') {
+    var sheet3 = openSheet_(TAB_ZONE_SUB);
+    if (!sheet3 || sheet3.getLastRow() < 2) {
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0,
+               academicsBySubjectLevel: {}, skillsByCategory: {} };
+    }
+    var zoneName = trim_(auth.zone);
+    var data3 = sheet3.getRange(2, 1, sheet3.getLastRow() - 1, 14).getValues();
+    for (var j = 0; j < data3.length; j++) {
+      if (trim_(data3[j][2]) !== zoneName) continue;  // col C = Zone
+      total++;
+      var pType3 = (data3[j][7]  || '').toString();          // col H
+      var level3 = (data3[j][8]  || '').toString().trim();   // col I = Level
+      var cat3   = (data3[j][13] || '').toString().trim();   // col N
+      if (pType3.indexOf('Technical Skills') !== -1) {
+        skills++;
+        if (cat3) skillsByCategory[cat3] = (skillsByCategory[cat3] || 0) + 1;
+      } else if (pType3.indexOf('Academics') !== -1 || pType3.indexOf('Quiz') !== -1) {
+        academics++;
+        if (level3 && cat3) {
+          var slKey3 = level3 + ':' + cat3;
+          academicsBySubjectLevel[slKey3] = (academicsBySubjectLevel[slKey3] || 0) + 1;
+        }
+      } else if (pType3 === 'Teacher') {
+        if (cat3 && innov.teacher.hasOwnProperty(cat3)) innov.teacher[cat3]++;
+      } else if (pType3.indexOf('Youth') !== -1 || pType3.indexOf('Out-of-School') !== -1) {
+        if (cat3 && innov.youth.hasOwnProperty(cat3)) innov.youth[cat3]++;
+      } else {
+        if (cat3 && innov.learner.hasOwnProperty(cat3)) innov.learner[cat3]++;
+      }
+    }
+  }
+
+  return {
+    status: 'ok',
+    innovations: innov,
+    academics: academics,
+    skills: skills,
+    total: total,
+    academicsBySubjectLevel: academicsBySubjectLevel,
+    skillsByCategory: skillsByCategory,
+  };
+}
+
 // ── Internal helpers ──────────────────────────────────────────
 function openSheet_(tabName) {
-  return SpreadsheetApp.openById(SHEET_ID).getSheetByName(tabName);
+  return getSpreadsheet_().getSheetByName(tabName);
 }
 
 function trim_(val) {

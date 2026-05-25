@@ -28,6 +28,12 @@ function submitZoneParticipant(data) {
     return { status: 'error', message: 'Missing required field: ' + missing };
   }
 
+  // 1.5 Check slot availability & duplicates
+  var check = checkZoneSlotAndDuplicate_(data);
+  if (!check.allowed) {
+    return { status: check.reason, refNumber: check.ref, message: check.message };
+  }
+
   // 2. Generate reference number: ZON-[timestamp ms]-[random 4 digits]
   var tsMs = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
   var rand = Math.floor(1000 + Math.random() * 9000);
@@ -139,4 +145,96 @@ function saveZoneReport_(data) {
     Logger.log('Zone report upload failed: ' + err.message);
     return '';
   }
+}
+
+// Helper to check slot and duplicate on backend for Zone
+function checkZoneSlotAndDuplicate_(data) {
+  var zoneName = data.zone;
+  var fullName   = (data.fullName || '').toString().trim();
+  var category   = (data.category || '').toString().trim();
+  var level      = (data.level || '').toString().trim();
+  var pType      = data.participantType || '';
+  if (pType === 'Learner' && data.learnerSubType) {
+    pType = 'Learner — ' + data.learnerSubType;
+  }
+  
+  var sheet = openSheet_(TAB_ZONE_SUB);
+  if (!sheet) return { allowed: true };
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { allowed: true };
+  
+  var values = sheet.getRange(2, 1, lastRow - 1, 15).getValues(); // Cols A-O
+  
+  var duplicateRef = null;
+  var slotCount = 0;
+  
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    // Col C: Zone, Col H: Participant Type, Col I: Level, Col J: Full Name, Col N: Category
+    var rowZone   = (row[2] || '').toString().trim();
+    var rowPType  = (row[7] || '').toString().trim();
+    var rowLevel  = (row[8] || '').toString().trim();
+    var rowName   = (row[9] || '').toString().trim();
+    var rowCat    = (row[13] || '').toString().trim();
+    var rowRef    = (row[1] || '').toString().trim();
+    
+    if (rowZone.toLowerCase() === zoneName.toLowerCase()) {
+      // 1. Check duplicate name + category + level + school
+      if (rowName.toLowerCase() === fullName.toLowerCase() &&
+          rowCat.toLowerCase() === category.toLowerCase() &&
+          rowLevel.toLowerCase() === level.toLowerCase()) {
+        duplicateRef = rowRef;
+      }
+      
+      // 2. Count for slot limit check
+      if (rowPType.toLowerCase() === pType.toLowerCase() &&
+          rowCat.toLowerCase() === category.toLowerCase()) {
+        if (pType.indexOf('Academics') !== -1 || pType.indexOf('Technical Skills') !== -1) {
+          if (rowLevel.toLowerCase() === level.toLowerCase()) {
+            slotCount++;
+          }
+        } else {
+          slotCount++;
+        }
+      }
+    }
+  }
+  
+  // Duplicate check first
+  if (duplicateRef && data.bypassDuplicate !== true) {
+    return {
+      allowed: false,
+      reason: 'duplicate',
+      ref: duplicateRef,
+      message: 'Warning: ' + fullName + ' already submitted in ' + category + '. Reference: ' + duplicateRef
+    };
+  }
+  
+  // Slot limit check
+  var maxLimit = 1;
+  if (pType.indexOf('Technical Skills') !== -1) {
+    if (category === 'Civil Engineering') maxLimit = 4;
+    else if (category === 'Mechanical Engineering') maxLimit = 4;
+    else if (category === 'Electronics Services') maxLimit = 2;
+    else if (category === 'Fashion Technology') maxLimit = 1;
+    else if (category === 'Cosmetology') maxLimit = 1;
+  } else if (pType.indexOf('Academics') !== -1) {
+    maxLimit = 1;
+  } else if (pType === 'Teacher' || pType.indexOf('Youth') !== -1) {
+    maxLimit = 1;
+  } else {
+    // Learner Innovations
+    maxLimit = 3;
+  }
+  
+  if (slotCount >= maxLimit) {
+    return {
+      allowed: false,
+      reason: 'full',
+      message: 'This slot is already full: ' + category + ' — ' + level
+    };
+  }
+  
+  return { allowed: true };
 }
