@@ -1253,11 +1253,9 @@ const ZoneForm = (() => {
   // ── Progress Bars ─────────────────────────────────────────────
   async function loadProgressData() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getProgressData', phone: _auth.phone, source: 'zone' }),
-      });
-      const data = await res.json();
+      const data = await FirestoreDB.getProgressData(
+        _auth.phone, 'zone', _auth.zone, _auth.schoolName
+      );
       if (data.status !== 'ok') throw new Error(data.message);
       renderProgressBars(data);
       const loading = document.getElementById('sf-progress-loading');

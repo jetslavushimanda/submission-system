@@ -17,12 +17,34 @@ var FIRESTORE_BASE    = 'https://firestore.googleapis.com/v1/projects/' +
 
 // ── Firestore REST helper ──────────────────────────────────────
 function firestoreAdd_(collection, docObj) {
-  var url     = FIRESTORE_BASE + collection + '?key=' + API_KEY;
-  var payload = { fields: toFirestoreFields_(docObj) };
+  var docId = docObj.__doc_id;
+  
+  var cleanObj = {};
+  Object.keys(docObj).forEach(function(k) {
+    if (k !== '__doc_id') {
+      cleanObj[k] = docObj[k];
+    }
+  });
+
+  var url;
+  var method;
+  
+  if (docId) {
+    url = FIRESTORE_BASE + collection + '/' + encodeURIComponent(docId) + '?key=' + API_KEY;
+    method = 'PATCH';
+  } else {
+    url = FIRESTORE_BASE + collection + '?key=' + API_KEY;
+    method = 'POST';
+  }
+
+  var payload = { fields: toFirestoreFields_(cleanObj) };
 
   var resp = UrlFetchApp.fetch(url, {
-    method:      'POST',
+    method:      method,
     contentType: 'application/json',
+    headers: {
+      'Authorization': 'Bearer ' // Prevents Apps Script from appending personal GCP OAuth token
+    },
     payload:     JSON.stringify(payload),
     muteHttpExceptions: true,
   });
@@ -152,15 +174,43 @@ function migrateAllToFirestore() {
     Logger.log('Zone Submissions done. OK=' + ok + ' FAIL=' + fail);
   }
 
-  // ── 4. Settings (deadlines) ───────────────────────────────
-  Logger.log('=== Writing default deadlines to Firestore ===');
+  // ── 4. Settings (deadlines & system) ────────────────────────
+  Logger.log('=== Writing deadlines and system settings to Firestore ===');
+  var sheetId = PropertiesService.getScriptProperties().getProperty('SHEET_ID') || '';
+  var driveFolderId = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID') || '';
   firestoreAdd_('settings', {
     __doc_id:     'deadlines',
     School_Open:  '2026-05-26T00:00:00',
     School_Close: '2026-05-30T23:59:00',
     Zone_Open:    '2026-06-01T00:00:00',
     Zone_Close:   '2026-06-05T23:59:00',
+    sheetId:       sheetId,
+    driveFolderId: driveFolderId,
+    driveUrl:      driveFolderId ? 'https://drive.google.com/drive/folders/' + driveFolderId : '',
   });
 
   Logger.log('=== Migration complete ===');
+}
+
+// Standalone function to migrate only system settings without re-running full data migration
+function migrateSystemSettingsToFirestore() {
+  Logger.log('=== Migrating System Settings to Firestore ===');
+  var props = PropertiesService.getScriptProperties();
+  var sheetId = props.getProperty('SHEET_ID') || '';
+  var driveFolderId = props.getProperty('DRIVE_FOLDER_ID') || '';
+  var driveUrl = driveFolderId ? 'https://drive.google.com/drive/folders/' + driveFolderId : '';
+
+  // Write directly into the deadlines document which has public read/write permissions
+  var ok = firestoreAdd_('settings', {
+    __doc_id:      'deadlines',
+    sheetId:       sheetId,
+    driveFolderId: driveFolderId,
+    driveUrl:      driveUrl,
+  });
+
+  if (ok) {
+    Logger.log('System settings successfully written to Firestore.');
+  } else {
+    Logger.log('FAILED to write system settings to Firestore.');
+  }
 }
