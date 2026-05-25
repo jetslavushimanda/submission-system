@@ -11,19 +11,18 @@
 // ═══════════════════════════════════════════════════════════════
 
 var FIRESTORE_PROJECT = 'jets2026-lavushimanda';
+var API_KEY           = 'AIzaSyDINoYBAtoXgLF28ZE3OKEdYBODCWCg_Wc';
 var FIRESTORE_BASE    = 'https://firestore.googleapis.com/v1/projects/' +
                         FIRESTORE_PROJECT + '/databases/(default)/documents/';
 
 // ── Firestore REST helper ──────────────────────────────────────
 function firestoreAdd_(collection, docObj) {
-  var url     = FIRESTORE_BASE + collection;
-  var token   = ScriptApp.getOAuthToken();
+  var url     = FIRESTORE_BASE + collection + '?key=' + API_KEY;
   var payload = { fields: toFirestoreFields_(docObj) };
 
   var resp = UrlFetchApp.fetch(url, {
     method:      'POST',
     contentType: 'application/json',
-    headers:     { Authorization: 'Bearer ' + token },
     payload:     JSON.stringify(payload),
     muteHttpExceptions: true,
   });
