@@ -79,7 +79,7 @@ function checkRegistration(phone) {
     return {
       found:   false,
       reason:  'inactive',
-      message: 'Registration pending. Contact Mwansa Gibson: 0973375828',
+      message: 'Registration pending. Contact the District JETS Organiser: 0973375828',
     };
   }
 

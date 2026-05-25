@@ -28,6 +28,7 @@ const TAB_SCHOOL_SUB  = "School Submissions";   // Tab 2
 const TAB_ZONE_SUB    = "Zone Submissions";     // Tab 3
 const TAB_DASHBOARD   = "District Dashboard";   // Tab 4
 const TAB_CORRECTIONS = "Correction Requests";  // Tab 5
+const TAB_SETTINGS     = "Settings";             // Tab 6
 
 // ── doGet ─────────────────────────────────────────────────────
 // Health-check: paste the web app URL in a browser to confirm
@@ -198,6 +199,50 @@ function doPost(e) {
         result = { status: 'error', message: 'Unauthorized. District access only.' };
       } else {
         result = adminToggleStatus_(payload);
+      }
+
+    } else if (action === "adminGetAllOrganisers") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminGetAllOrganisers_();
+      }
+
+    } else if (action === "adminUpdateOrganiser") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminUpdateOrganiser_(payload);
+      }
+
+    } else if (action === "adminDeleteOrganiser") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminDeleteOrganiser_(payload);
+      }
+
+    } else if (action === "getDeadlines") {
+      // No auth — every user reads deadlines on load
+      result = getDeadlines_();
+
+    } else if (action === "saveDeadlines") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = saveDeadlines_(payload);
+      }
+
+    } else if (action === "getProgressData") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found) {
+        result = { status: 'error', message: 'Unauthorized.' };
+      } else {
+        result = getProgressData_(payload, authCheck);
       }
 
     } else {
@@ -585,6 +630,20 @@ function setupSystem() {
   tab5.setFrozenRows(1);
   tab5.autoResizeColumns(1, h5.length);
 
+  // ── Step 5c: Tab 6 — Settings (deadlines) ───────────────────
+  var tab6 = ss.insertSheet('Settings');
+  tab6.getRange(1, 1, 1, 3).setValues([['Key', 'Value', 'Description']]);
+  tab6.getRange(1, 1, 1, 3)
+    .setBackground('#1a5c2a').setFontColor('#ffffff').setFontWeight('bold');
+  tab6.getRange(2, 1, 4, 3).setValues([
+    ['School_Open',  '2026-05-26T00:00:00', 'School submissions open'],
+    ['School_Close', '2026-05-30T23:59:00', 'School submissions close'],
+    ['Zone_Open',    '2026-06-01T00:00:00', 'Zone submissions open'],
+    ['Zone_Close',   '2026-06-05T23:59:00', 'Zone submissions close'],
+  ]);
+  tab6.setFrozenRows(1);
+  tab6.autoResizeColumns(1, 3);
+
   // ── Step 6: Create Drive folder tree ────────────────────────
   Logger.log('Creating Drive folders...');
   var mainFolder   = DriveApp.createFolder('JETS Lavushimanda 2024-2026');
@@ -873,6 +932,87 @@ function getWelcomeStats_(payload) {
   }
 
   return result;
+}
+
+// ── getProgressData_ ──────────────────────────────────────────
+// Returns per-category innovation counts broken down by participant type
+// (Learner / Teacher / Youth) plus academics and skills totals.
+// source='school' filters Tab 2 by phone; source='zone' filters Tab 3 by zone.
+function getProgressData_(payload, auth) {
+  var source = payload.source; // 'school' or 'zone'
+
+  var CAT_KEYS = [
+    'Agricultural Science Innovations',
+    'Chemistry Innovations',
+    'Physics & Renewable Energy Innovations',
+    'Computer Science & Software Development Innovations',
+    'Mathematics Innovations',
+    'Medicine & Health Innovations',
+    'Robotics & Artificial Intelligence Innovations',
+    'Food Science, Technology & Hospitality Innovations',
+    'Environmental Sustainable Development Innovations'
+  ];
+
+  var innov = { learner: {}, teacher: {}, youth: {} };
+  for (var ci = 0; ci < CAT_KEYS.length; ci++) {
+    innov.learner[CAT_KEYS[ci]] = 0;
+    innov.teacher[CAT_KEYS[ci]] = 0;
+    innov.youth[CAT_KEYS[ci]]   = 0;
+  }
+  var academics = 0, skills = 0, total = 0;
+
+  if (source === 'school') {
+    var sheet = openSheet_(TAB_SCHOOL_SUB);
+    if (!sheet || sheet.getLastRow() < 2) {
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0 };
+    }
+    var matchPhone = trim_(auth.phone);
+    var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (trim_(data[i][6]) !== matchPhone) continue; // col G = Phone
+      total++;
+      var pType = (data[i][7] || '').toString();          // col H = Participant Type
+      var cat   = (data[i][13] || '').toString().trim();  // col N = Category
+      if (pType.indexOf('Technical Skills') !== -1) {
+        skills++;
+      } else if (pType.indexOf('Academics') !== -1 || pType.indexOf('Quiz') !== -1) {
+        academics++;
+      } else if (pType === 'Teacher') {
+        if (cat && innov.teacher.hasOwnProperty(cat)) innov.teacher[cat]++;
+      } else if (pType.indexOf('Youth') !== -1 || pType.indexOf('Out-of-School') !== -1) {
+        if (cat && innov.youth.hasOwnProperty(cat)) innov.youth[cat]++;
+      } else {
+        if (cat && innov.learner.hasOwnProperty(cat)) innov.learner[cat]++;
+      }
+    }
+
+  } else if (source === 'zone') {
+    var sheet3 = openSheet_(TAB_ZONE_SUB);
+    if (!sheet3 || sheet3.getLastRow() < 2) {
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0 };
+    }
+    var zoneName = trim_(auth.zone);
+    var data3 = sheet3.getRange(2, 1, sheet3.getLastRow() - 1, 14).getValues();
+    for (var j = 0; j < data3.length; j++) {
+      if (trim_(data3[j][2]) !== zoneName) continue;  // col C = Zone
+      total++;
+      var pType3 = (data3[j][7] || '').toString();          // col H
+      var cat3   = (data3[j][13] || '').toString().trim();  // col N
+      if (pType3.indexOf('Technical Skills') !== -1) {
+        skills++;
+      } else if (pType3.indexOf('Academics') !== -1 || pType3.indexOf('Quiz') !== -1) {
+        academics++;
+      } else if (pType3 === 'Teacher') {
+        if (cat3 && innov.teacher.hasOwnProperty(cat3)) innov.teacher[cat3]++;
+      } else if (pType3.indexOf('Youth') !== -1 || pType3.indexOf('Out-of-School') !== -1) {
+        if (cat3 && innov.youth.hasOwnProperty(cat3)) innov.youth[cat3]++;
+      } else {
+        if (cat3 && innov.learner.hasOwnProperty(cat3)) innov.learner[cat3]++;
+      }
+    }
+  }
+
+  return { status: 'ok', innovations: innov, academics: academics, skills: skills, total: total };
 }
 
 // ── Internal helpers ──────────────────────────────────────────

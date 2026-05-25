@@ -138,3 +138,102 @@ function adminToggleStatus_(payload) {
 
   return { status: 'ok', message: 'Status updated to ' + newStatus + '.' };
 }
+
+// ── adminGetAllOrganisers_ ────────────────────────────────────
+// Returns ALL rows from Tab 1 including District.
+// Used by the DEC Admin Organiser Management panel.
+function adminGetAllOrganisers_() {
+  var sheet = openSheet_(TAB_REGISTERED);
+  if (!sheet) return { status: 'error', message: 'Registered Schools tab not found.' };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'ok', organisers: [] };
+
+  var data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  var organisers = [];
+
+  for (var i = 0; i < data.length; i++) {
+    organisers.push({
+      zone:      (data[i][0] || '').toString().trim(),
+      name:      (data[i][1] || '').toString().trim(),
+      type:      (data[i][2] || '').toString().trim(),
+      organiser: (data[i][3] || '').toString().trim(),
+      phone:     (data[i][4] || '').toString().trim(),
+      role:      (data[i][5] || '').toString().trim(),
+      status:    (data[i][6] || 'Active').toString().trim(),
+    });
+  }
+
+  return { status: 'ok', organisers: organisers };
+}
+
+// ── adminUpdateOrganiser_ ─────────────────────────────────────
+// Updates a row matched by origZone + origName + origRole + origPhone.
+// Uses phone in the match key to correctly handle DEC members who share
+// the same zone/name/role but differ only by phone.
+function adminUpdateOrganiser_(payload) {
+  var sheet = openSheet_(TAB_REGISTERED);
+  if (!sheet) return { status: 'error', message: 'Registered Schools tab not found.' };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'error', message: 'No records found.' };
+
+  var data      = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  var targetRow = -1;
+
+  for (var i = 0; i < data.length; i++) {
+    if ((data[i][0] || '').toString().trim() === (payload.origZone  || '') &&
+        (data[i][1] || '').toString().trim() === (payload.origName  || '') &&
+        (data[i][5] || '').toString().trim() === (payload.origRole  || '') &&
+        (data[i][4] || '').toString().trim() === (payload.origPhone || '')) {
+      targetRow = i + 2;
+      break;
+    }
+  }
+
+  if (targetRow < 0) return { status: 'error', message: 'Record not found.' };
+
+  sheet.getRange(targetRow, 5).setNumberFormat('@');
+  sheet.getRange(targetRow, 1, 1, 7).setValues([[
+    payload.zone      || '',
+    payload.name      || '',
+    payload.type      || '',
+    payload.organiser || '',
+    payload.phone     || '',
+    payload.role      || 'School',
+    payload.status    || 'Active',
+  ]]);
+  sheet.getRange(targetRow, 1, 1, 7)
+    .setBackground((payload.status === 'Active') ? '#d9ead3' : '#fce8e6');
+
+  return { status: 'ok', message: 'Organiser updated.' };
+}
+
+// ── adminDeleteOrganiser_ ─────────────────────────────────────
+// Deletes a row matched by zone + name + role + phone.
+// Past submissions in Tabs 2 and 3 are NOT touched.
+function adminDeleteOrganiser_(payload) {
+  var sheet = openSheet_(TAB_REGISTERED);
+  if (!sheet) return { status: 'error', message: 'Registered Schools tab not found.' };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'error', message: 'No records found.' };
+
+  var data      = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+  var targetRow = -1;
+
+  for (var i = 0; i < data.length; i++) {
+    if ((data[i][0] || '').toString().trim() === (payload.zone  || '') &&
+        (data[i][1] || '').toString().trim() === (payload.name  || '') &&
+        (data[i][5] || '').toString().trim() === (payload.role  || '') &&
+        (data[i][4] || '').toString().trim() === (payload.phone || '')) {
+      targetRow = i + 2;
+      break;
+    }
+  }
+
+  if (targetRow < 0) return { status: 'error', message: 'Record not found.' };
+
+  sheet.deleteRow(targetRow);
+  return { status: 'ok', message: 'Organiser deleted. Past submissions preserved.' };
+}

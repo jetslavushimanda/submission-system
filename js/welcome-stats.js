@@ -105,8 +105,8 @@ const WelcomeStats = (() => {
     const slotTotal  = (typeof SLOT_TOTALS !== 'undefined' && SLOT_TOTALS[_auth.schoolType]) || 30;
     const dlDays     = _daysUntil(SCHOOL_DEADLINE);
     const dlText     = dlDays < 0  ? 'School deadline has passed'
-                     : dlDays === 0 ? '⏰ School deadline: TODAY!'
-                     : `⏰ School deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
+                     : dlDays === 0 ? 'School deadline: TODAY!'
+                     : `School deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
 
     const needsSkills = (_auth.schoolType === 'Secondary School' || _auth.schoolType === 'Private School');
     const missing = [];
@@ -123,28 +123,24 @@ const WelcomeStats = (() => {
 
     c.innerHTML = `
       <div class="ws-card">
-        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)} 👋</div>
+        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)}</div>
         <div class="ws-sub">${_esc(_auth.schoolName)} &nbsp;|&nbsp; ${_esc(_auth.zone)} Zone</div>
         <div class="ws-div"></div>
         <div class="ws-hdr">YOUR SUBMISSION SUMMARY:</div>
         <div class="ws-rule"></div>
         <div class="ws-row">
-          <span class="ws-ico">📊</span>
           <span class="ws-lbl">Total Submitted:</span>
           <span class="ws-val${data.total >= slotTotal ? ' ws-full' : ''}">${data.total} of ${slotTotal} slots</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">📚</span>
           <span class="ws-lbl">Innovations:</span>
           <span class="ws-val">${data.innovations} submitted</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">🎓</span>
           <span class="ws-lbl">Academics:</span>
           <span class="ws-val">${data.academics} submitted</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">🔧</span>
           <span class="ws-lbl">Skills:</span>
           <span class="ws-val">${data.skills} submitted</span>
         </div>
@@ -163,8 +159,8 @@ const WelcomeStats = (() => {
     const ZONE_TOTAL = 64;
     const dlDays  = _daysUntil(ZONE_DEADLINE);
     const dlText  = dlDays < 0  ? 'Zone deadline has passed'
-                  : dlDays === 0 ? '⏰ Zone deadline: TODAY!'
-                  : `⏰ Zone deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
+                  : dlDays === 0 ? 'Zone deadline: TODAY!'
+                  : `Zone deadline in: ${dlDays} day${dlDays !== 1 ? 's' : ''}`;
 
     const allSchools   = (typeof ZONES !== 'undefined' && ZONES[_auth.zone])
                          ? ZONES[_auth.zone].schools.map(s => s.name) : [];
@@ -180,28 +176,24 @@ const WelcomeStats = (() => {
 
     c.innerHTML = `
       <div class="ws-card">
-        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)} 👋</div>
+        <div class="ws-greet">Welcome back ${_esc(_auth.organiserName)}</div>
         <div class="ws-sub">${_esc(_auth.zone)} Zone</div>
         <div class="ws-div"></div>
         <div class="ws-hdr">ZONE SUBMISSION SUMMARY:</div>
         <div class="ws-rule"></div>
         <div class="ws-row">
-          <span class="ws-ico">📊</span>
           <span class="ws-lbl">Total Submitted:</span>
           <span class="ws-val${data.total >= ZONE_TOTAL ? ' ws-full' : ''}">${data.total} of ${ZONE_TOTAL} slots</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">📚</span>
           <span class="ws-lbl">Innovations:</span>
           <span class="ws-val">${data.innovations} submitted</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">🎓</span>
           <span class="ws-lbl">Academics:</span>
           <span class="ws-val">${data.academics} submitted</span>
         </div>
         <div class="ws-row">
-          <span class="ws-ico">🔧</span>
           <span class="ws-lbl">Skills:</span>
           <span class="ws-val">${data.skills} submitted</span>
         </div>

@@ -26,6 +26,7 @@ const SchoolForm = (() => {
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
     loadSlotCount();
+    loadProgressData();
     startAutoSave();
     checkAndShowDraft();
   }
@@ -51,14 +52,14 @@ const SchoolForm = (() => {
 <header class="sf-header">
   <div class="sf-header-logos">
     <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo"
-         onerror="this.classList.add('logo-missing')">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>GRZ</span>'">
     <div class="sf-header-text">
       <p class="sf-h-title">JETS 2024&#8211;2026</p>
       <p class="sf-h-sub">School Submission Form</p>
       <p class="sf-h-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
     </div>
     <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo"
-         onerror="this.classList.add('logo-missing')">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>JETS</span>'">
   </div>
   <div class="sf-signedin-bar">
     Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong>
@@ -88,10 +89,22 @@ const SchoolForm = (() => {
     <p class="sf-slot-note">Total: <strong>${_slotTotal}</strong> &mdash; ${_auth.schoolType}</p>
   </div>
 
+  <!-- ── SUBMISSION PROGRESS ── -->
+  <div class="sf-progress-section" id="sf-progress-section">
+    <div class="sf-progress-hdr" onclick="SchoolForm._toggleProgress()">
+      <span class="sf-progress-title">SUBMISSION PROGRESS</span>
+      <button class="sf-progress-toggle" id="sf-progress-toggle">Hide</button>
+    </div>
+    <div id="sf-progress-body">
+      <div class="sf-progress-loading" id="sf-progress-loading">Loading progress&hellip;</div>
+      <div id="sf-progress-data" class="hidden"></div>
+    </div>
+  </div>
+
   <!-- ── VIEW MY SUBMISSIONS ── -->
   <button class="btn-view-history"
           onclick="SubmissionHistory.show('${_pageId}', App.authData, 'school', ${_slotTotal})">
-    &#128203; VIEW MY SUBMISSIONS
+    VIEW MY SUBMISSIONS
   </button>
 
   <!-- ── MAIN TAB BAR ── -->
@@ -153,7 +166,7 @@ const SchoolForm = (() => {
           <input type="text" id="l-title" placeholder="Enter title of innovation">
         </div>
         <div class="field hidden" id="l-report-field">
-          <label for="l-report">Innovation Report <span class="req">*</span></label>
+          <label for="l-report">Innovation Report</label>
           <input type="file" id="l-report" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
           <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
         </div>
@@ -191,7 +204,7 @@ const SchoolForm = (() => {
           <input type="text" id="t-title" placeholder="Enter title of innovation">
         </div>
         <div class="field">
-          <label for="t-report">Innovation Report <span class="req">*</span></label>
+          <label for="t-report">Innovation Report</label>
           <input type="file" id="t-report" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
           <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
         </div>
@@ -229,7 +242,7 @@ const SchoolForm = (() => {
           <input type="text" id="y-title" placeholder="Enter title of innovation">
         </div>
         <div class="field">
-          <label for="y-report">Innovation Report <span class="req">*</span></label>
+          <label for="y-report">Innovation Report</label>
           <input type="file" id="y-report" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
           <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
         </div>
@@ -357,7 +370,7 @@ const SchoolForm = (() => {
         <input type="text" id="sk-title" placeholder="Enter title of innovation">
       </div>
       <div class="field hidden" id="sk-report-field">
-        <label for="sk-report">Innovation Report <span class="req">*</span></label>
+        <label for="sk-report">Innovation Report</label>
         <input type="file" id="sk-report" accept=".doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
         <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
       </div>
@@ -534,18 +547,16 @@ const SchoolForm = (() => {
   function learnerValid() {
     return filled('l-name') && filled('l-age') && rval('l-sex') &&
            v('l-level') && v('l-grade') && v('l-cat') &&
-           filled('l-title') && hasFile('l-report') &&
-           filled('l-teacher');
+           filled('l-title') && filled('l-teacher');
   }
 
   function teacherValid() {
-    return filled('t-name') && rval('t-sex') && v('t-cat') &&
-           filled('t-title') && hasFile('t-report');
+    return filled('t-name') && rval('t-sex') && v('t-cat') && filled('t-title');
   }
 
   function youthValid() {
     return filled('y-name') && filled('y-age') && rval('y-sex') &&
-           v('y-cat') && filled('y-title') && hasFile('y-report') && filled('y-mentor');
+           v('y-cat') && filled('y-title') && filled('y-mentor');
   }
 
   function academicsValid() {
@@ -558,8 +569,7 @@ const SchoolForm = (() => {
     if (!document.getElementById('sk-name')) return false;
     return filled('sk-name') && filled('sk-age') && rval('sk-sex') &&
            v('sk-level') && v('sk-grade') && v('sk-cat') && v('sk-subskill') &&
-           (!vis('sk-report-field') || hasFile('sk-report')) &&
-           (!vis('sk-title-field')  || filled('sk-title')) &&
+           (!vis('sk-title-field') || filled('sk-title')) &&
            filled('sk-teacher');
   }
 
@@ -606,11 +616,12 @@ const SchoolForm = (() => {
       );
       msg.innerHTML = `
         <div class="alert alert-success"><strong>${payload.fullName}</strong> submitted successfully. Ref: ${data.refNumber || ''}</div>
-        <a class="btn-whatsapp" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">&#128172; Send Confirmation via WhatsApp</a>
+        <a class="btn-whatsapp" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">Send Confirmation via WhatsApp</a>
         <button class="btn-add-another" id="sf-add-btn">+ ADD ANOTHER PARTICIPANT</button>`;
       document.getElementById('sf-add-btn').addEventListener('click', () => render(_pageId, _auth));
       clearDraft();
       loadSlotCount();
+      loadProgressData();
       if (effectiveTab() === 'skills') loadSkillCounts();
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.refresh();
 
@@ -769,6 +780,63 @@ const SchoolForm = (() => {
     if (totalEl) totalEl.textContent = totalUsed;
   }
 
+  // ── Progress Bars ─────────────────────────────────────────────
+  async function loadProgressData() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getProgressData', phone: _auth.phone, source: 'school' }),
+      });
+      const data = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message);
+      renderProgressBars(data);
+      const loading = document.getElementById('sf-progress-loading');
+      const body    = document.getElementById('sf-progress-data');
+      if (loading) loading.classList.add('hidden');
+      if (body)    body.classList.remove('hidden');
+    } catch (_) {
+      const loading = document.getElementById('sf-progress-loading');
+      if (loading) loading.textContent = 'Could not load progress.';
+    }
+  }
+
+  function renderProgressBars(data) {
+    const el = document.getElementById('sf-progress-data');
+    if (!el) return;
+    const inn = data.innovations || { learner: {}, teacher: {}, youth: {} };
+
+    function barRow(cat, n) {
+      const full = n >= 1;
+      return `<div class="sf-prog-row">
+        <span class="sf-prog-label">${cat}</span>
+        <div class="sf-prog-bar-wrap"><div class="sf-prog-bar${full ? ' sf-prog-bar-full' : ''}" style="width:${full ? 100 : 0}%"></div></div>
+        <span class="sf-prog-count${full ? ' sf-prog-count-done' : ''}">${n}/1${full ? ' &#10003;' : ''}</span>
+      </div>`;
+    }
+
+    function section(title, counts) {
+      const rows = INNOVATION_CATEGORIES.map(c => barRow(c, counts[c] || 0)).join('');
+      return `<div class="sf-prog-section"><div class="sf-prog-section-title">${title}</div>${rows}</div>`;
+    }
+
+    el.innerHTML =
+      section('Learner Innovations', inn.learner || {}) +
+      section('Teacher Innovations', inn.teacher || {}) +
+      section('Out-of-School Youth Innovations', inn.youth || {}) +
+      `<div class="sf-prog-totals">
+        <div class="sf-prog-total-row"><span>Academics submitted:</span><span>${data.academics || 0}</span></div>
+        <div class="sf-prog-total-row"><span>Skills submitted:</span><span>${data.skills || 0}</span></div>
+        <div class="sf-prog-total-row sf-prog-total-main"><span>Total slots used:</span><span>${data.total || 0} of ${_slotTotal}</span></div>
+      </div>`;
+  }
+
+  function _toggleProgress() {
+    const body    = document.getElementById('sf-progress-body');
+    const btn     = document.getElementById('sf-progress-toggle');
+    const hidden  = body && body.classList.toggle('hidden');
+    if (btn) btn.textContent = hidden ? 'Show' : 'Hide';
+  }
+
   // ── Draft Auto-Save ───────────────────────────────────────────
   function draftKey() { return 'jets_draft_school_' + _auth.phone; }
 
@@ -841,7 +909,7 @@ const SchoolForm = (() => {
     banner.className = 'draft-banner';
     banner.innerHTML = `
       <div class="draft-banner-top">
-        <span class="draft-banner-msg">&#128203; Draft restored from ${fmtSavedTime(draft.savedAt)}.</span>
+        <span class="draft-banner-msg">Draft restored from ${fmtSavedTime(draft.savedAt)}.</span>
       </div>
       <div class="draft-banner-btns">
         <button class="draft-btn-continue" id="sf-draft-continue">CONTINUE DRAFT</button>
@@ -964,6 +1032,6 @@ const SchoolForm = (() => {
     return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()}`;
   }
 
-  return { render };
+  return { render, _toggleProgress };
 
 })();
