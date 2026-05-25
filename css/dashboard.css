@@ -65,7 +65,7 @@
   display: block;
   opacity: 0;
   animation: logo-fadein 0.5s ease 0.1s forwards;
-  mix-blend-mode: multiply;
+
 }
 
 .db-header-text { flex: 1; }

@@ -97,7 +97,7 @@ body {
   flex-shrink: 0;
   opacity: 0;
   animation: logo-fadein 0.5s ease 0.1s forwards;
-  mix-blend-mode: multiply;
+
 }
 
 /* Fallback when image fails to load — hide img, promote the label */
@@ -959,7 +959,7 @@ body {
   display: block;
   opacity: 0;
   animation: logo-fadein 0.5s ease 0.1s forwards;
-  mix-blend-mode: multiply;
+
 }
 
 .sf-header-text { flex: 1; }
