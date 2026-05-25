@@ -97,7 +97,6 @@ function doPost(e) {
       var auth = checkRegistration(payload.phone);
       if (auth.found === true) {
         var dlResult = getDeadlines_();
-        var driveUrl = DRIVE_FOLDER_ID ? 'https://drive.google.com/drive/folders/' + DRIVE_FOLDER_ID : '';
         result = {
           status:        'found',
           zone:          auth.zone,
@@ -107,7 +106,6 @@ function doPost(e) {
           phone:         auth.phone,
           role:          auth.role,
           deadlines:     (dlResult.status === 'ok' && dlResult.deadlines) ? dlResult.deadlines : {},
-          driveUrl:      driveUrl,
         };
       } else {
         result = {
@@ -289,15 +287,6 @@ function doPost(e) {
         result = { status: 'error', message: 'Unauthorized.' };
       } else {
         result = getProgressData_(payload, authCheck);
-      }
-
-    } else if (action === "uploadFile") {
-      var authCheck = checkRegistration(payload.phone);
-      if (!authCheck.found) {
-        result = { status: 'error', message: 'Unauthorized.' };
-      } else {
-        var url = saveReportToDrive(payload.base64, payload.fileName, payload.mimeType);
-        result = { status: 'ok', url: url };
       }
 
     } else {

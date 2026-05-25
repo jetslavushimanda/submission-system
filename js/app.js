@@ -7,6 +7,8 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREF
 
 const SESSION_KEY = "jets_session";
 
+// FIX 4: Shared fetch helper with AbortController timeout.
+// Default 12 s — enough for Apps Script cold starts.
 async function postWithTimeout(body, ms) {
   ms = ms || 10000;
   const controller = new AbortController();
@@ -151,15 +153,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Load Live Deadlines ───────────────────────────────────────
-// Reads deadlines from Firestore (fast, no cold start).
+// FIX 5: Read from sessionStorage first — avoids a round-trip on every page load.
 async function loadDeadlines() {
   const cached = sessionStorage.getItem(SESSION_KEY + '_dl');
   if (cached) {
     try { applyDeadlines(JSON.parse(cached)); return; } catch (_) {}
   }
   try {
-    const data = await FirestoreDB.getDeadlines();
-    if (data.status === 'ok' && data.deadlines && Object.keys(data.deadlines).length) {
+    const data = await postWithTimeout({ action: 'getDeadlines' }, 8000);
+    if (data.status === 'ok' && data.deadlines) {
       applyDeadlines(data.deadlines);
       sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
     }
@@ -174,16 +176,9 @@ function applyDeadlines(dl) {
   if (authData && authData.role) applyRoleUI(authData.role);
 }
 
-// ── Session clear helper ──────────────────────────────────────
-function clearSession() {
-  sessionStorage.removeItem('userPhone');
-  sessionStorage.removeItem('userRole');
-  sessionStorage.removeItem('schoolInfo');
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_KEY + '_dl');
-}
-
 // ── Phone Verification ────────────────────────────────────────
+// FIX 6: Uses getInitData — single round-trip returns auth + deadlines.
+// FIX 4: postWithTimeout aborts after 12 s instead of hanging forever.
 async function verifyPhone() {
   const input = document.getElementById('landing-phone');
   const msgEl = document.getElementById('landing-auth-msg');
@@ -213,6 +208,7 @@ async function verifyPhone() {
         schoolType: data.schoolType,
         organiserName: data.organiserName
       }));
+      // FIX 5: Cache deadlines so subsequent page loads skip the server call.
       if (data.deadlines && Object.keys(data.deadlines).length) {
         applyDeadlines(data.deadlines);
         sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
@@ -223,13 +219,19 @@ async function verifyPhone() {
 
     } else if (data.reason === 'inactive') {
       authData = null;
-      clearSession();
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
       msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
 
     } else {
       authData = null;
-      clearSession();
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
       msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
     }
@@ -242,7 +244,7 @@ async function verifyPhone() {
     }
   } finally {
     btn.disabled    = false;
-    btn.textContent = 'PROCEED';
+    btn.textContent = 'Verify';
   }
 }
 
@@ -574,7 +576,11 @@ function setThemeColor(color) {
 }
 
 function signOut() {
-  clearSession();
+  sessionStorage.removeItem('userPhone');
+  sessionStorage.removeItem('userRole');
+  sessionStorage.removeItem('schoolInfo');
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY + '_dl');
   authData = null;
   lockAllButtons();
   document.getElementById('landing-phone').value = '';

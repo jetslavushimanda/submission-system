@@ -97,13 +97,13 @@ const ZoneForm = (() => {
 
   <header class="sf-header">
     <div class="sf-header-logos">
-      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
+      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo">
       <div class="sf-header-text">
         <p class="sf-h-title">JETS 2026 SUBMISSION SYSTEM</p>
-        <p class="sf-h-sub">Zone Submission Form</p>
+        <p class="sf-h-sub">ZONE SUBMISSION FORM</p>
         <p class="sf-h-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
       </div>
-      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
+      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo">
     </div>
     <div class="sf-signedin-bar">
       Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong> &mdash; ${_auth.organiserName}
@@ -1028,25 +1028,34 @@ const ZoneForm = (() => {
 
     try {
       if (fileDataInMemory.base64) {
-        btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
-        const fileRes = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action:   'uploadFile',
-            phone:    _auth.phone,
-            base64:   fileDataInMemory.base64,
-            fileName: fileDataInMemory.name,
-            mimeType: fileDataInMemory.type
-          }),
-        });
-        if (!fileRes.ok) throw new Error('Report upload failed: ' + fileRes.status);
-        const fileData = await fileRes.json();
-        if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
-        payload.fileUrl = fileData.url;
+        payload.reportFileBase64 = fileDataInMemory.base64;
+        payload.reportFileName   = fileDataInMemory.name;
+        payload.reportFileType   = fileDataInMemory.type;
       }
 
-      btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
-      const data = await FirestoreDB.submitZone(payload);
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'submitZone', ...payload }),
+      });
+      if (!res.ok) throw new Error('Server error (' + res.status + ').');
+      const data = await res.json();
+
+      if (data.status === 'duplicate') {
+        showDuplicateWarningBanner({ ...payload, refNumber: data.refNumber });
+        _submitting = false;
+        btn.disabled = false;
+        btn.innerHTML = 'SUBMIT PARTICIPANT';
+        return;
+      }
+
+      if (data.status === 'full') {
+        fetchExistingSubmissions();
+        alert('This slot has already filled up. Zonal submission aborted.');
+        _submitting = false;
+        btn.disabled = false;
+        btn.innerHTML = 'SUBMIT PARTICIPANT';
+        return;
+      }
 
       if (data.status !== 'ok') throw new Error(data.message || 'Submission failed.');
 
@@ -1215,11 +1224,15 @@ const ZoneForm = (() => {
     };
   }
 
-  // ── Slot Counter ───────────────────────────────────────────────────
+  // ── Slot Counter ──────────────────────────────────────────────
   async function loadSlotCount() {
     try {
-      const data = await FirestoreDB.getZoneCount(_auth.phone, _auth.zone);
-      if (typeof data.total === 'number') updateSlot(data.total);
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getZoneCount', phone: _auth.phone, zone: _auth.zone }),
+      });
+      const data = await res.json();
+      if (typeof data.count === 'number') updateSlot(data.count);
     } catch (_) {
       const el = document.getElementById('sf-slot-display');
       if (el) el.innerHTML = '&#8212; of ' + ZONE_SLOT_TOTAL;
@@ -1241,9 +1254,15 @@ const ZoneForm = (() => {
   // ── Submission list loader for quota checking ──
   async function fetchExistingSubmissions() {
     try {
-      const data = await FirestoreDB.getSubmissionHistory(
-        _auth.phone, 'zone', _auth.zone, _auth.schoolName
-      );
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'getSubmissionHistory',
+          phone:  _auth.phone,
+          source: 'zone',
+        }),
+      });
+      const data = await res.json();
       if (data.status === 'ok') {
         existingSubmissions = data.rows || [];
       }

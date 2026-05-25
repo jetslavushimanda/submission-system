@@ -136,34 +136,18 @@ const Dashboard = (() => {
 
     setRefreshBtn(true);
     try {
-      const data = await FirestoreDB.getFullDashboard();
+      const res  = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getFullDashboard', phone: _auth.phone }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Dashboard load failed.');
 
       _data     = data;
       _allSubs  = data.allSubs || [];
       _cacheTime = Date.now();
       renderAll(data);
-
-      // Self-Healing System Config Sync:
-      // If Firestore deadlines doc doesn't have the driveUrl, but we have it in _auth, save it to Firestore!
-      if (_auth && _auth.driveUrl && !data.driveUrl) {
-        console.log("Self-Healing Sync: Writing driveUrl to Firestore...");
-        try {
-          await FirestoreDB.saveDeadlines({ driveUrl: _auth.driveUrl });
-          _data.driveUrl = _auth.driveUrl; // Update local cache
-          // Re-render only quick actions so the button updates instantly
-          const actionsBox = document.querySelector('.db-actions-body');
-          if (actionsBox) {
-            const parent = actionsBox.closest('.db-section');
-            if (parent) {
-              parent.outerHTML = renderActions(_data);
-            }
-          }
-          console.log("Self-Healing Sync: driveUrl successfully saved to Firestore.");
-        } catch (err) {
-          console.warn("Failed to auto-sync driveUrl to Firestore:", err);
-        }
-      }
 
       // Start auto-refresh of feed
       if (_feedTimer) clearInterval(_feedTimer);
@@ -179,16 +163,22 @@ const Dashboard = (() => {
 
   async function refreshFeed() {
     try {
-      const data = await FirestoreDB.getRecentFeed();
+      const res  = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getRecentFeed', phone: _auth.phone }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
       if (data.status === 'ok') {
         const feedEl = document.getElementById('db-feed-list');
         if (feedEl) {
           feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
+          // Re-bind delete buttons in feed
           feedEl.querySelectorAll('.btn-feed-delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
               e.stopPropagation();
               const d = btn.dataset;
-              promptDelete(d.ref, d.participant, d.school, d.category, d.source);
+              promptDelete(d.ref, d.participant, d.school, d.category);
             });
           });
         }
@@ -244,97 +234,6 @@ const Dashboard = (() => {
 
   function closeDeleteDrawer() {
     closeActiveDrawer();
-  }
-
-  // ── Delete submission with WhatsApp ───────────────────────────
-  function promptDelete(ref, participant, school, category, source) {
-    source = source || (ref.startsWith('ZON-') || ref.startsWith('ZN-') ? 'Zone' : 'School');
-    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    setTxt('del-ref',         ref);
-    setTxt('del-participant', participant);
-    setTxt('del-school',      school);
-    setTxt('del-category',    category);
-
-    const reasonSel = document.getElementById('del-reason');
-    if (reasonSel) reasonSel.selectedIndex = 0;
-    const delMsg = document.getElementById('del-msg');
-    if (delMsg) { delMsg.style.display = 'none'; delMsg.textContent = ''; }
-
-    const confirmBtn = document.getElementById('btn-confirm-delete');
-    if (confirmBtn) {
-      confirmBtn.dataset.ref         = ref;
-      confirmBtn.dataset.source      = source;
-      confirmBtn.dataset.participant = participant;
-      confirmBtn.dataset.school      = school;
-      confirmBtn.dataset.category    = category;
-      confirmBtn.disabled    = false;
-      confirmBtn.textContent = 'DELETE & NOTIFY';
-    }
-
-    activateDrawer('delete-confirm');
-  }
-
-  async function confirmDelete() {
-    const btn    = document.getElementById('btn-confirm-delete');
-    const reason = (document.getElementById('del-reason') || {}).value || '';
-    const delMsg = document.getElementById('del-msg');
-
-    if (!reason) {
-      if (delMsg) { delMsg.textContent = 'Please select a reason.'; delMsg.style.display = 'block'; }
-      return;
-    }
-
-    const ref         = btn.dataset.ref;
-    const source      = btn.dataset.source;
-    const participant = btn.dataset.participant;
-    const school      = btn.dataset.school;
-    const category    = btn.dataset.category;
-
-    btn.disabled    = true;
-    btn.textContent = 'Deleting…';
-
-    try {
-      await FirestoreDB.deleteSubmission(ref, source, _auth.organiserName, reason, { participant, school, category });
-
-      // Look up organiser phone from loaded organisers list
-      let organiserPhone = '';
-      let organiserName  = school;
-      if (_organisers) {
-        const org = _organisers.find(o => (o.name || o.schoolName || '') === school);
-        if (org) { organiserPhone = org.phone || ''; organiserName = org.organiser || org.organiserName || school; }
-      }
-
-      const siteLink = window.location.href.split('?')[0];
-      const waMsg = encodeURIComponent(
-        `JETS 2026 - Submission Removed\n` +
-        `Dear ${organiserName},\n\n` +
-        `Participant: ${participant}\n` +
-        `Category: ${category}\n` +
-        `Reference: ${ref}\n` +
-        `Reason: ${reason}\n\n` +
-        `Please resubmit: ${siteLink}\n` +
-        `Contact District JETS Organiser: 0973375828\n` +
-        `Lavushimanda District JETS 2026`
-      );
-
-      closeDeleteDrawer();
-      loadFullData(true);
-
-      const waUrl = organiserPhone
-        ? `https://wa.me/260${organiserPhone.replace(/^0/, '')}?text=${waMsg}`
-        : `https://wa.me/?text=${waMsg}`;
-      window.open(waUrl, '_blank', 'noopener');
-
-    } catch (err) {
-      if (delMsg) { delMsg.textContent = 'Delete failed: ' + err.message; delMsg.style.display = 'block'; }
-      btn.disabled    = false;
-      btn.textContent = 'DELETE & NOTIFY';
-    }
-  }
-
-  function bindDeleteConfirmBtn() {
-    const btn = document.getElementById('btn-confirm-delete');
-    if (btn) btn.addEventListener('click', confirmDelete);
   }
 
   function showGlobalLoader() {
@@ -494,7 +393,7 @@ const Dashboard = (() => {
   </div>
   <div class="drawer-body" style="padding:16px">
     <div style="margin-bottom:12px; font-size:14px; color:#555;">
-      This action is permanent and logs the deletion. A WhatsApp notification will be generated for the organiser.
+      Are you sure you want to delete the following submission? This action is permanent and will remove the record from the database.
     </div>
     <div class="delete-sub-details" style="background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:16px; border-left:4px solid #e74c3c; font-size:13px; line-height:1.6;">
       <div><strong>Ref#:</strong> <span id="del-ref" style="font-family:monospace; font-weight:bold;"></span></div>
@@ -504,20 +403,11 @@ const Dashboard = (() => {
     </div>
     <div style="margin-bottom:16px;">
       <label style="display:block; font-weight:bold; margin-bottom:6px; font-size:13px; color:#333;">Reason for Deletion *</label>
-      <select id="del-reason" style="width:100%; padding:10px; border:1.5px solid #ccc; border-radius:6px; font-family:inherit; font-size:13px; outline:none;">
-        <option value="">-- Select Reason --</option>
-        <option value="Wrong category">Wrong category</option>
-        <option value="Wrong name">Wrong name</option>
-        <option value="Duplicate">Duplicate</option>
-        <option value="Wrong school">Wrong school</option>
-        <option value="Exceeds limit">Exceeds limit</option>
-        <option value="Other">Other</option>
-      </select>
+      <textarea id="del-reason" style="width:100%; height:80px; padding:10px; border:1.5px solid #ccc; border-radius:6px; font-family:inherit; resize:none; outline:none; font-size:13px;" placeholder="Please type a detailed reason for this deletion (required)"></textarea>
     </div>
-    <div id="del-msg" style="margin-bottom:8px; font-size:13px; color:#e74c3c; display:none;"></div>
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <button id="btn-confirm-delete" class="db-action-btn db-action-primary" style="background:#e74c3c; flex:1; box-shadow:none; padding:12px; font-size:13px; min-width:140px;">DELETE &amp; NOTIFY</button>
-      <button id="btn-cancel-delete" class="db-action-btn db-action-outline" style="flex:1; border-color:#ccc; color:#555; padding:12px; font-size:13px; min-width:100px;" onclick="Dashboard.closeDeleteDrawer()">CANCEL</button>
+    <div style="display:flex; gap:12px;">
+      <button id="btn-confirm-delete" class="db-action-btn db-action-primary" style="background:#e74c3c; flex:1; box-shadow:none; padding:12px; font-size:13px;">DELETE NOW</button>
+      <button id="btn-cancel-delete" class="db-action-btn db-action-outline" style="flex:1; border-color:#ccc; color:#555; padding:12px; font-size:13px;" onclick="Dashboard.closeDeleteDrawer()">CANCEL</button>
     </div>
   </div>
 </div>
@@ -540,11 +430,9 @@ const Dashboard = (() => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const d = btn.dataset;
-        promptDelete(d.ref, d.participant, d.school, d.category, d.source);
+        promptDelete(d.ref, d.participant, d.school, d.category);
       });
     });
-
-    bindDeleteConfirmBtn();
 
     // Re-active active drawer if it was set
     if (_activeDrawerId) {
@@ -635,7 +523,17 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
         btn.textContent = decision === 'Approved' ? 'Approving…' : 'Rejecting…';
 
         try {
-          const data = await FirestoreDB.handleCorrectionDecision(requestId, decision, _auth.organiserName);
+          const res = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action:    'handleCorrectionDecision',
+              phone:     _auth.phone,
+              requestId: requestId,
+              decision:  decision,
+            }),
+          });
+          if (!res.ok) throw new Error('Server error ' + res.status);
+          const data = await res.json();
           if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
 
           // Refresh the dashboard to show updated state
@@ -758,23 +656,9 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       const srcBadge = f.source === 'Zone'
         ? '<span class="db-feed-source-badge db-src-zone">ZONE</span>'
         : '<span class="db-feed-source-badge db-src-school">SCHOOL</span>';
-      const timeStr = fmtTimeShort(f.time) + ' ' + fmtDate(f.time);
       return `
-<div class="db-feed-item">
-  <div class="db-feed-item-top">
-    ${srcBadge}
-    <span class="db-feed-time">${esc(timeStr)}</span>
-    <span class="db-feed-zone">${esc(f.zone)}</span>
-    <button class="btn-feed-delete"
-            data-ref="${esc(f.ref)}"
-            data-source="${esc(f.source)}"
-            data-participant="${esc(f.participant)}"
-            data-school="${esc(f.school)}"
-            data-category="${esc(f.category)}">&#128465;</button>
+    <div class="db-feed-ref">${esc(f.category)} &nbsp;&bull;&nbsp; ${esc(f.ref)}</div>
   </div>
-  <div class="db-feed-school">${esc(f.school)}</div>
-  <div class="db-feed-participant"><strong>${esc(f.participant)}</strong></div>
-  <div class="db-feed-ref">${esc(f.category)} &bull; <span class="db-feed-refno">${esc(f.ref)}</span></div>
 </div>`;
     }).join('');
   }
@@ -847,28 +731,27 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
   // ── Section 7: Quick Actions ──────────────────────────────────
   function renderActions(data) {
-    const drive = data.driveUrl || '';
+    const exp   = data.exportUrl       || '#';
+    const expS  = data.exportSchoolUrl || exp;
+    const expZ  = data.exportZoneUrl   || exp;
+    const drive = data.driveUrl        || '#';
 
     return `
 <div class="db-section">
   <div class="db-section-title">Quick Actions</div>
   <div class="db-actions-body">
-    <button onclick="Dashboard.exportExcel('all')" class="db-action-btn db-action-primary">
+    <a href="${exp}" target="_blank" rel="noopener" class="db-action-btn db-action-primary">
       Export All to Excel
-    </button>
-    <button onclick="Dashboard.exportExcel('school')" class="db-action-btn db-action-secondary">
+    </a>
+    <a href="${expS}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
       Export School Submissions
-    </button>
-    <button onclick="Dashboard.exportExcel('zone')" class="db-action-btn db-action-secondary">
+    </a>
+    <a href="${expZ}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
       Export Zone Submissions
-    </button>
-    ${drive && drive !== '#' ? `
+    </a>
     <a href="${drive}" target="_blank" rel="noopener" class="db-action-btn db-action-outline">
       View Drive Files
-    </a>` : `
-    <button onclick="alert('Google Drive folder is not configured in Firestore yet. Please run migrateSystemSettingsToFirestore() in your Apps Script editor to update it.')" class="db-action-btn db-action-outline" style="opacity: 0.6; cursor: not-allowed;">
-      View Drive Files (Not Configured)
-    </button>`}
+    </a>
   </div>
 </div>`;
   }
@@ -1113,10 +996,15 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     if (!loadEl) return;
 
     try {
-      const data = await FirestoreDB.adminGetAllOrganisers();
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'adminGetAllOrganisers', phone: _auth.phone }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Load failed.');
 
-      _organisers = data.records || [];
+      _organisers = data.organisers || [];
       populateOrganiserTable(_organisers);
       bindOrgTableEvents();
       bindOrgFormEvents();
@@ -1318,13 +1206,26 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     saveBtn.textContent = 'Saving…';
 
     try {
-      const record = { zone, name, type, organiser, phone, role, status };
-      let data;
+      let payload, action;
       if (_orgEditTarget) {
-        data = await FirestoreDB.adminUpdateOrganiser(_orgEditTarget.phone, record);
+        action  = 'adminUpdateOrganiser';
+        payload = {
+          action, phone: _auth.phone,
+          origZone: _orgEditTarget.zone, origName: _orgEditTarget.name,
+          origRole: _orgEditTarget.role, origPhone: _orgEditTarget.phone,
+          zone, name, type, organiser, phone, role, status,
+        };
       } else {
-        data = await FirestoreDB.adminAddOrganiser(record);
+        action  = 'adminAddSchool';
+        payload = { action, phone: _auth.phone, zone, name, type, organiser, organiserPhone: phone, role, status };
       }
+
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
 
       orgShowMsg('ok', _orgEditTarget ? 'Organiser updated.' : 'Organiser added.');
@@ -1345,7 +1246,16 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     btn.textContent = label;
 
     try {
-      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, newStatus);
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'adminToggleStatus', phone: _auth.phone,
+          zone: btn.dataset.zone, name: btn.dataset.name,
+          role: btn.dataset.role, newStatus,
+        }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
       loadOrganisers();
     } catch (err) {
@@ -1359,7 +1269,16 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     btn.disabled    = true;
     btn.textContent = 'Activating…';
     try {
-      const data = await FirestoreDB.adminToggleStatus(btn.dataset.phone, 'Active');
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'adminToggleStatus', phone: _auth.phone,
+          zone: btn.dataset.zone, name: btn.dataset.name,
+          role: btn.dataset.role, newStatus: 'Active',
+        }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
       if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
       loadOrganisers();
     } catch (err) {
@@ -1405,7 +1324,16 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       b.disabled    = true;
       b.textContent = 'Deleting…';
       try {
-        const data = await FirestoreDB.adminDeleteOrganiser(b.dataset.phone);
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'adminDeleteOrganiser', phone: _auth.phone,
+            zone: b.dataset.zone, name: b.dataset.name,
+            role: b.dataset.role, phone: b.dataset.phone,
+          }),
+        });
+        if (!res.ok) throw new Error('Server error ' + res.status);
+        const data = await res.json();
         if (data.status !== 'ok') throw new Error(data.message || 'Delete failed.');
         confirmRow.remove();
         loadOrganisers();
@@ -1590,18 +1518,23 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       saveBtn.textContent = 'Saving…';
 
       try {
-        const dlPayload = {
-          School_Open:  so || App.deadlines.School_Open,
-          School_Close: sc,
-          Zone_Open:    zo || App.deadlines.Zone_Open,
-          Zone_Close:   zc,
-        };
-        const data = await FirestoreDB.saveDeadlines(dlPayload);
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'saveDeadlines', phone: _auth.phone,
+            schoolOpen:  so || App.deadlines.School_Open,
+            schoolClose: sc,
+            zoneOpen:    zo || App.deadlines.Zone_Open,
+            zoneClose:   zc,
+          }),
+        });
+        if (!res.ok) throw new Error('Server error ' + res.status);
+        const data = await res.json();
         if (data.status !== 'ok') throw new Error(data.message || 'Save failed.');
 
-        App.setDeadlines(dlPayload);
+        App.setDeadlines(data.deadlines);
         dlShowMsg(dlFormMsg(), 'ok', 'Deadlines saved. Countdown updated immediately.');
-        updateDeadlineDisplay(dlPayload);
+        updateDeadlineDisplay(data.deadlines);
         setTimeout(() => {
           const p = dlFormPanel();
           if (p) p.classList.add('hidden');
@@ -1629,15 +1562,17 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
       try {
         const defaults = {
-          School_Open:  '2026-05-26T00:00:00',
-          School_Close: '2026-05-30T23:59:00',
-          Zone_Open:    '2026-06-01T00:00:00',
-          Zone_Close:   '2026-06-05T23:59:00',
+          schoolOpen: '2026-05-26T00:00:00', schoolClose: '2026-05-30T23:59:00',
+          zoneOpen:   '2026-06-01T00:00:00', zoneClose:   '2026-06-05T23:59:00',
         };
-        const data = await FirestoreDB.saveDeadlines(defaults);
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'saveDeadlines', phone: _auth.phone, ...defaults }),
+        });
+        const data = await res.json();
         if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
-        App.setDeadlines(defaults);
-        updateDeadlineDisplay(defaults);
+        App.setDeadlines(data.deadlines);
+        updateDeadlineDisplay(data.deadlines);
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Deadlines reset to original.'; }
       } catch (err) {
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
@@ -1658,16 +1593,20 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       if (msg) { msg.className = 'db-org-form-msg'; msg.textContent = 'Closing…'; }
 
       try {
-        const closedDl = {
-          School_Open:  App.deadlines.School_Open,
-          School_Close: nowS,
-          Zone_Open:    App.deadlines.Zone_Open,
-          Zone_Close:   nowS,
-        };
-        const data = await FirestoreDB.saveDeadlines(closedDl);
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'saveDeadlines', phone: _auth.phone,
+            schoolOpen:  App.deadlines.School_Open,
+            schoolClose: nowS,
+            zoneOpen:    App.deadlines.Zone_Open,
+            zoneClose:   nowS,
+          }),
+        });
+        const data = await res.json();
         if (data.status !== 'ok') throw new Error(data.message || 'Failed.');
-        App.setDeadlines(closedDl);
-        updateDeadlineDisplay(closedDl);
+        App.setDeadlines(data.deadlines);
+        updateDeadlineDisplay(data.deadlines);
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-ok'; msg.textContent = 'Submissions closed.'; }
       } catch (err) {
         if (msg) { msg.className = 'db-org-form-msg db-org-msg-err'; msg.textContent = err.message; }
@@ -1701,124 +1640,10 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     on('db-dl-btn-close-now',     dlCloseNow);
   }
 
-  // ── Excel Exporting ───────────────────────────────────────────
-  function exportExcel(type) {
-    if (!_data) {
-      alert("No data loaded to export yet.");
-      return;
-    }
-
-    if (typeof XLSX === 'undefined') {
-      alert("SheetJS library is not loaded. Please verify your internet connection or script tags.");
-      return;
-    }
-
-    const schoolSubs = _data.schoolSubmissions || [];
-    const zoneSubs   = _data.zoneSubmissions || [];
-
-    const wb = XLSX.utils.book_new();
-
-    const pad2 = n => n < 10 ? '0' + n : n;
-    const formatExcelDate = iso => {
-      if (!iso) return '';
-      try {
-        const d = new Date(iso);
-        if (isNaN(d.getTime())) return String(iso);
-        const y = d.getFullYear();
-        const m = pad2(d.getMonth() + 1);
-        const day = pad2(d.getDate());
-        const hr = pad2(d.getHours());
-        const min = pad2(d.getMinutes());
-        const sec = pad2(d.getSeconds());
-        return `${y}-${m}-${day} ${hr}:${min}:${sec}`;
-      } catch (_) {
-        return String(iso);
-      }
-    };
-
-    const mapSchoolRow = (r) => {
-      let pTypeLabel = r.participantType || '';
-      if (pTypeLabel === 'Learner' && r.learnerSubType) {
-        pTypeLabel = 'Learner — ' + r.learnerSubType;
-      }
-      const supervisorMentor = r.supervisingTeacher || r.mentorName || r.mentor || '';
-      return {
-        'Timestamp':                  formatExcelDate(r.timestamp),
-        'Ref#':                       r.ref || r.refNumber || '',
-        'Zone':                       r.zone || '',
-        'School':                     r.schoolName || r.school || '',
-        'School Type':                r.schoolType || '',
-        'Organiser Name':             r.organiserName || '',
-        'Phone':                      r.phone || '',
-        'Participant Type':           pTypeLabel,
-        'Level':                      r.level || '',
-        'Full Name':                  r.fullName || r.participant || '',
-        'Age':                        r.age || '',
-        'Sex':                        r.sex || r.gender || '',
-        'Grade':                      r.gradeForm || r.grade || '',
-        'Category':                   r.category || '',
-        'Sub-Skill':                  r.subSkill || r.subType || '',
-        'Innovation Title':           r.titleOfInnovation || r.title || '',
-        'Supervising Teacher/Mentor': supervisorMentor,
-        'Report Drive Link':          r.fileUrl || r.driveUrl || '',
-        'Submitted By':               r.submittedBy || r.submitterRole || ''
-      };
-    };
-
-    const mapZoneRow = (r) => {
-      let pTypeLabel = r.participantType || '';
-      if (pTypeLabel === 'Learner' && r.learnerSubType) {
-        pTypeLabel = 'Learner — ' + r.learnerSubType;
-      }
-      const supervisorMentor = r.supervisingTeacher || r.mentorName || r.mentor || '';
-      return {
-        'Timestamp':                  formatExcelDate(r.timestamp),
-        'Ref#':                       r.ref || r.refNumber || '',
-        'Zone':                       r.zone || '',
-        'Zonal Coordinator':          r.coordinatorName || '',
-        'Phone':                      r.phone || '',
-        'Participant School':         r.participantSchool || r.school || '',
-        'School Type':                r.schoolType || '',
-        'Participant Type':           pTypeLabel,
-        'Level':                      r.level || '',
-        'Full Name':                  r.fullName || r.participant || '',
-        'Age':                        r.age || '',
-        'Sex':                        r.sex || r.gender || '',
-        'Grade':                      r.gradeForm || r.grade || '',
-        'Category':                   r.category || '',
-        'Sub-Skill':                  r.subSkill || r.subType || '',
-        'Innovation Title':           r.titleOfInnovation || r.title || '',
-        'Supervising Teacher/Mentor': supervisorMentor,
-        'Report Drive Link':          r.fileUrl || r.driveUrl || '',
-        'Submitted By':               r.submittedBy || r.submitterRole || ''
-      };
-    };
-
-    if (type === 'school' || type === 'all') {
-      const rows = schoolSubs.map(mapSchoolRow);
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'School Submissions');
-    }
-
-    if (type === 'zone' || type === 'all') {
-      const rows = zoneSubs.map(mapZoneRow);
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, 'Zone Submissions');
-    }
-
-    const filename = `JETS_Submissions_${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(wb, filename);
-  }
-
   // ── Public API ────────────────────────────────────────────────
   return {
     render,
     destroy,
-    openDrawer,
-    closeActiveDrawer,
-    closeDeleteDrawer,
-    promptDelete,
-    exportExcel,
     _manualRefresh: () => loadFullData(true),
     _reloadOrg:     () => loadOrganisers(),
   };
