@@ -956,12 +956,12 @@ const SchoolForm = (() => {
         payload.reportFileType   = fileDataInMemory.type;
       }
 
-      const res = await fetch(APPS_SCRIPT_URL, {
+      const res2 = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ action: 'submitSchool', ...payload }),
       });
-      if (!res.ok) throw new Error('Server error (' + res.status + ').');
-      const data = await res.json();
+      if (!res2.ok) throw new Error('Server error (' + res2.status + ').');
+      const data = await res2.json();
 
       if (data.status === 'duplicate') {
         showDuplicateWarningBanner({ ...payload, refNumber: data.refNumber });
@@ -1149,12 +1149,8 @@ const SchoolForm = (() => {
   // ── Slot Counter ──────────────────────────────────────────────
   async function loadSlotCount() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getCount', phone: _auth.phone, schoolName: _auth.schoolName }),
-      });
-      const data = await res.json();
-      if (typeof data.count === 'number') updateSlot(data.count);
+      const data = await FirestoreDB.getSchoolCount(_auth.phone, _auth.schoolName);
+      if (typeof data.total === 'number') updateSlot(data.total);
     } catch (_) {
       const el = document.getElementById('sf-slot-display');
       if (el) el.innerHTML = '&#8212; of ' + _slotTotal;
@@ -1176,15 +1172,9 @@ const SchoolForm = (() => {
   // ── Submission list loader for quota checking ──
   async function fetchExistingSubmissions() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'getSubmissionHistory',
-          phone:  _auth.phone,
-          source: 'school',
-        }),
-      });
-      const data = await res.json();
+      const data = await FirestoreDB.getSubmissionHistory(
+        _auth.phone, 'school', _auth.zone, _auth.schoolName
+      );
       if (data.status === 'ok') {
         existingSubmissions = data.rows || [];
       }
@@ -1194,11 +1184,9 @@ const SchoolForm = (() => {
   // ── Progress Bars ─────────────────────────────────────────────
   async function loadProgressData() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getProgressData', phone: _auth.phone, source: 'school' }),
-      });
-      const data = await res.json();
+      const data = await FirestoreDB.getProgressData(
+        _auth.phone, 'school', _auth.zone, _auth.schoolName
+      );
       if (data.status !== 'ok') throw new Error(data.message);
       renderProgressBars(data);
       const loading = document.getElementById('sf-progress-loading');

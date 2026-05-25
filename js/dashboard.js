@@ -136,12 +136,7 @@ const Dashboard = (() => {
 
     setRefreshBtn(true);
     try {
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getFullDashboard', phone: _auth.phone }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.getFullDashboard();
       if (data.status !== 'ok') throw new Error(data.message || 'Dashboard load failed.');
 
       _data     = data;
@@ -163,17 +158,11 @@ const Dashboard = (() => {
 
   async function refreshFeed() {
     try {
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getRecentFeed', phone: _auth.phone }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await FirestoreDB.getRecentFeed();
       if (data.status === 'ok') {
         const feedEl = document.getElementById('db-feed-list');
         if (feedEl) {
           feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
-          // Re-bind delete buttons in feed
           feedEl.querySelectorAll('.btn-feed-delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
               e.stopPropagation();
