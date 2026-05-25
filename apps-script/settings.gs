@@ -55,7 +55,7 @@ function getDeadlines_() {
 // Auth is enforced in Code.gs (District role only).
 function saveDeadlines_(payload) {
   try {
-    var ss    = SpreadsheetApp.openById(SHEET_ID);
+    var ss    = getSpreadsheet_();
     var sheet = ss.getSheetByName(TAB_SETTINGS);
 
     if (!sheet) {

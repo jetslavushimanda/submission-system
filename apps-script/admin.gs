@@ -237,3 +237,96 @@ function adminDeleteOrganiser_(payload) {
   sheet.deleteRow(targetRow);
   return { status: 'ok', message: 'Organiser deleted. Past submissions preserved.' };
 }
+
+// ── adminDeleteSubmission_ ────────────────────────────────────
+// Deletes a submission row in Tab 2 or Tab 3 matched by Ref#.
+// Appends a log entry to "Deleted_Log" sheet tab.
+// Returns the organiser name and phone number to help pre-fill the WhatsApp notification on the frontend.
+function adminDeleteSubmission_(payload) {
+  var ref = (payload.refNumber || '').toString().trim();
+  var reason = (payload.reason || 'Not specified').toString().trim();
+  var deletedBy = (payload.deletedBy || 'DEC Organiser').toString().trim();
+  
+  if (!ref) return { status: 'error', message: 'Reference number is required.' };
+  
+  var isSchool = ref.indexOf('SCH-') === 0;
+  var isZone = ref.indexOf('ZON-') === 0;
+  
+  if (!isSchool && !isZone) {
+    return { status: 'error', message: 'Invalid reference number format: ' + ref };
+  }
+  
+  var tabName = isSchool ? TAB_SCHOOL_SUB : TAB_ZONE_SUB;
+  var sheet = openSheet_(tabName);
+  if (!sheet) return { status: 'error', message: 'Submissions tab not found: ' + tabName };
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { status: 'error', message: 'No submissions found in ' + tabName };
+  
+  // Ref# is in column B (index 1)
+  var values = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+  var targetRow = -1;
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0].toString().trim() === ref) {
+      targetRow = i + 2;
+      break;
+    }
+  }
+  
+  if (targetRow < 0) return { status: 'error', message: 'Submission record not found: ' + ref };
+  
+  // Read row values before deleting
+  var rowValues = sheet.getRange(targetRow, 1, 1, 19).getValues()[0];
+  
+  var organiserName = '';
+  var organiserPhone = '';
+  var participantName = '';
+  var schoolName = '';
+  var category = '';
+  
+  if (isSchool) {
+    organiserName = rowValues[5] || ''; // Col F
+    organiserPhone = rowValues[6] || ''; // Col G
+    participantName = rowValues[9] || ''; // Col J
+    schoolName = rowValues[3] || ''; // Col D
+    category = rowValues[13] || ''; // Col N
+  } else {
+    organiserName = rowValues[3] || ''; // Col D
+    organiserPhone = rowValues[4] || ''; // Col E
+    participantName = rowValues[9] || ''; // Col J
+    schoolName = rowValues[5] || ''; // Col F
+    category = rowValues[13] || ''; // Col N
+  }
+  
+  // Delete the row
+  sheet.deleteRow(targetRow);
+  
+  // Log to Deleted_Log sheet tab
+  var logSheet = openSheet_('Deleted_Log');
+  if (!logSheet) {
+    logSheet = ss.insertSheet('Deleted_Log');
+    logSheet.appendRow(['Timestamp', 'Request ID / Ref#', 'Participant Name', 'School', 'Category', 'Reason', 'Deleted By']);
+    logSheet.getRange(1, 1, 1, 7).setBackground('#c0392b').setFontColor('#ffffff').setFontWeight('bold');
+    logSheet.setFrozenRows(1);
+  }
+  logSheet.appendRow([
+    new Date(),
+    ref,
+    participantName,
+    schoolName,
+    category,
+    reason,
+    deletedBy
+  ]);
+  logSheet.autoResizeColumns(1, 7);
+  
+  return {
+    status: 'ok',
+    message: 'Submission removed successfully.',
+    organiserName: organiserName,
+    phone: organiserPhone,
+    participant: participantName,
+    category: category,
+    ref: ref
+  };
+}

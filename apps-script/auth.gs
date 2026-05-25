@@ -47,7 +47,7 @@ function checkRegistration(phone) {
   var phoneNorm = normalizePhone_(phone);
   Logger.log('checkRegistration called with: ' + phone + ' (normalized: ' + phoneNorm + ')');
 
-  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_REGISTERED);
+  var sheet = openSheet_(TAB_REGISTERED);
   if (!sheet) { Logger.log('Sheet tab not found'); return { found: false }; }
 
   var lastRow = sheet.getLastRow();

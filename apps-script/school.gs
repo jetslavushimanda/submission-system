@@ -28,6 +28,12 @@ function submitSchoolParticipant(data) {
     return { status: 'error', message: 'Missing required field: ' + missing };
   }
 
+  // 1.5 Check slot availability & duplicates
+  var check = checkSchoolSlotAndDuplicate_(data);
+  if (!check.allowed) {
+    return { status: check.reason, refNumber: check.ref, message: check.message };
+  }
+
   // 2. Generate reference number: SCH-[timestamp ms]-[random 4 digits]
   var tsMs = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
   var rand = Math.floor(1000 + Math.random() * 9000);
@@ -141,4 +147,114 @@ function saveSchoolReport_(data) {
     Logger.log('School report upload failed: ' + err.message);
     return '';
   }
+}
+
+// Helper to check slot and duplicate on backend for School
+function checkSchoolSlotAndDuplicate_(data) {
+  var schoolName = data.schoolName;
+  var schoolType = data.schoolType;
+  var fullName   = (data.fullName || '').toString().trim();
+  var category   = (data.category || '').toString().trim();
+  var level      = (data.level || '').toString().trim();
+  var pType      = data.participantType || '';
+  if (pType === 'Learner' && data.learnerSubType) {
+    pType = 'Learner — ' + data.learnerSubType;
+  }
+  
+  var sheet = openSheet_(TAB_SCHOOL_SUB);
+  if (!sheet) return { allowed: true };
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { allowed: true };
+  
+  var values = sheet.getRange(2, 1, lastRow - 1, 15).getValues(); // Cols A-O
+  
+  var duplicateRef = null;
+  var slotCount = 0;
+  
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    // Col D: School Name, Col H: Participant Type, Col I: Level, Col J: Full Name, Col N: Category
+    var rowSchool = (row[3] || '').toString().trim();
+    var rowPType  = (row[7] || '').toString().trim();
+    var rowLevel  = (row[8] || '').toString().trim();
+    var rowName   = (row[9] || '').toString().trim();
+    var rowCat    = (row[13] || '').toString().trim();
+    var rowRef    = (row[1] || '').toString().trim();
+    
+    if (rowSchool.toLowerCase() === schoolName.toLowerCase()) {
+      // 1. Check duplicate name + category + level + school
+      if (rowName.toLowerCase() === fullName.toLowerCase() &&
+          rowCat.toLowerCase() === category.toLowerCase() &&
+          rowLevel.toLowerCase() === level.toLowerCase()) {
+        duplicateRef = rowRef;
+      }
+      
+      // 2. Count for slot limit check
+      if (rowPType.toLowerCase() === pType.toLowerCase() &&
+          rowCat.toLowerCase() === category.toLowerCase()) {
+        if (pType.indexOf('Academics') !== -1 || pType.indexOf('Technical Skills') !== -1) {
+          if (rowLevel.toLowerCase() === level.toLowerCase()) {
+            slotCount++;
+          }
+        } else {
+          slotCount++;
+        }
+      }
+    }
+  }
+  
+  // Duplicate check first
+  if (duplicateRef && data.bypassDuplicate !== true) {
+    return {
+      allowed: false,
+      reason: 'duplicate',
+      ref: duplicateRef,
+      message: 'Warning: ' + fullName + ' already submitted in ' + category + '. Reference: ' + duplicateRef
+    };
+  }
+  
+  // Slot limit check
+  var maxLimit = 1;
+  var slotTotalsMap = {
+    'Primary School': 30,
+    'Open Centre School': 53,
+    'Secondary School': 52,
+    'Private School': 52,
+    'Community School': 30
+  };
+  
+  if (pType.indexOf('Technical Skills') !== -1) {
+    if (category === 'Civil Engineering') maxLimit = 4;
+    else if (category === 'Mechanical Engineering') maxLimit = 4;
+    else if (category === 'Electronics Services') maxLimit = 2;
+    else if (category === 'Fashion Technology') maxLimit = 1;
+    else if (category === 'Cosmetology') maxLimit = 1;
+  } else if (pType.indexOf('Academics') !== -1) {
+    if (schoolType === 'Secondary School') maxLimit = 2;
+    else if (schoolType === 'Private School') {
+      maxLimit = (level === 'ECE & Primary') ? 1 : 2;
+    } else {
+      maxLimit = 1;
+    }
+  } else if (pType === 'Teacher' || pType.indexOf('Youth') !== -1) {
+    maxLimit = 1;
+  } else {
+    // Learner Innovations
+    if (schoolType === 'Primary School') maxLimit = 1;
+    else if (schoolType === 'Open Centre School') maxLimit = 2;
+    else if (schoolType === 'Secondary School') maxLimit = 2;
+    else if (schoolType === 'Private School') maxLimit = 3;
+    else if (schoolType === 'Community School') maxLimit = 1;
+  }
+  
+  if (slotCount >= maxLimit) {
+    return {
+      allowed: false,
+      reason: 'full',
+      message: 'This slot is already full: ' + category + ' — ' + level
+    };
+  }
+  
+  return { allowed: true };
 }

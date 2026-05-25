@@ -7,6 +7,27 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREF
 
 const SESSION_KEY = "jets_session";
 
+// FIX 4: Shared fetch helper with AbortController timeout.
+// Default 12 s — enough for Apps Script cold starts.
+async function postWithTimeout(body, ms) {
+  ms = ms || 10000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      body:   JSON.stringify(body),
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 // ── Submission Deadlines ──────────────────────────────────────
 // Initialized to default values; refreshed from Settings tab on boot.
 let _deadlineSchoolOpen  = new Date("2026-05-26T00:00:00");
@@ -82,32 +103,67 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch live deadlines from Settings tab (non-blocking)
   loadDeadlines();
 
-  // Restore session if available
-  const stored = sessionStorage.getItem(SESSION_KEY);
-  if (stored) {
+  // Restore session if available using new keys
+  const userPhone = sessionStorage.getItem('userPhone');
+  const userRole  = sessionStorage.getItem('userRole');
+  const schoolInfoStr = sessionStorage.getItem('schoolInfo');
+  
+  if (userPhone && userRole && schoolInfoStr) {
     try {
-      authData = JSON.parse(stored);
-      if (authData && authData.phone && authData.role) {
-        applyRoleUI(authData.role);
-        if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-      }
+      const schoolInfo = JSON.parse(schoolInfoStr);
+      authData = {
+        phone: userPhone,
+        role: userRole,
+        zone: schoolInfo.zone,
+        schoolName: schoolInfo.schoolName,
+        schoolType: schoolInfo.schoolType,
+        organiserName: schoolInfo.organiserName
+      };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
+      applyRoleUI(userRole);
+      if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
     } catch (_) {
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
       sessionStorage.removeItem(SESSION_KEY);
+    }
+  } else {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (stored) {
+      try {
+        authData = JSON.parse(stored);
+        if (authData && authData.phone && authData.role) {
+          sessionStorage.setItem('userPhone', authData.phone);
+          sessionStorage.setItem('userRole', authData.role);
+          sessionStorage.setItem('schoolInfo', JSON.stringify({
+            zone: authData.zone,
+            schoolName: authData.schoolName,
+            schoolType: authData.schoolType,
+            organiserName: authData.organiserName
+          }));
+          applyRoleUI(authData.role);
+          if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
+        }
+      } catch (_) {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
     }
   }
 });
 
 // ── Load Live Deadlines ───────────────────────────────────────
+// FIX 5: Read from sessionStorage first — avoids a round-trip on every page load.
 async function loadDeadlines() {
+  const cached = sessionStorage.getItem(SESSION_KEY + '_dl');
+  if (cached) {
+    try { applyDeadlines(JSON.parse(cached)); return; } catch (_) {}
+  }
   try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'getDeadlines' }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await postWithTimeout({ action: 'getDeadlines' }, 8000);
     if (data.status === 'ok' && data.deadlines) {
       applyDeadlines(data.deadlines);
+      sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
     }
   } catch (_) {}
 }
@@ -121,11 +177,13 @@ function applyDeadlines(dl) {
 }
 
 // ── Phone Verification ────────────────────────────────────────
+// FIX 6: Uses getInitData — single round-trip returns auth + deadlines.
+// FIX 4: postWithTimeout aborts after 12 s instead of hanging forever.
 async function verifyPhone() {
-  const input   = document.getElementById('landing-phone');
-  const msgEl   = document.getElementById('landing-auth-msg');
-  const btn     = document.getElementById('btn-verify');
-  const phone   = input.value.trim();
+  const input = document.getElementById('landing-phone');
+  const msgEl = document.getElementById('landing-auth-msg');
+  const btn   = document.getElementById('btn-verify');
+  const phone = input.value.trim();
 
   if (!phone) {
     msgEl.innerHTML = '<p class="auth-msg-error">Please enter your phone number.</p>';
@@ -137,16 +195,24 @@ async function verifyPhone() {
   msgEl.innerHTML = '';
 
   try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'checkAuth', phone }),
-    });
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    const data = await res.json();
+    const data = await postWithTimeout({ action: 'getInitData', phone }, 12000);
 
     if (data.status === 'found') {
       authData = { phone, ...data };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
+      sessionStorage.setItem('userPhone', phone);
+      sessionStorage.setItem('userRole', data.role);
+      sessionStorage.setItem('schoolInfo', JSON.stringify({
+        zone: data.zone,
+        schoolName: data.schoolName,
+        schoolType: data.schoolType,
+        organiserName: data.organiserName
+      }));
+      // FIX 5: Cache deadlines so subsequent page loads skip the server call.
+      if (data.deadlines && Object.keys(data.deadlines).length) {
+        applyDeadlines(data.deadlines);
+        sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
+      }
       applyRoleUI(data.role);
       msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
@@ -154,18 +220,28 @@ async function verifyPhone() {
     } else if (data.reason === 'inactive') {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
       msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
 
     } else {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
       msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
     }
 
-  } catch (_) {
-    msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      msgEl.innerHTML = '<p class="auth-msg-error">Connection timeout. Check your internet and try again.</p>';
+    } else {
+      msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
+    }
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Verify';
@@ -490,10 +566,21 @@ function backToLanding() {
 function setThemeColor(color) {
   const meta = document.getElementById('meta-theme-color');
   if (meta) meta.setAttribute('content', color);
+  
+  // Dynamic browser title bar updates
+  if (color === '#1a5c2a') {
+    document.title = currentMode === 'school' ? 'School Submission | JETS 2026' : 'JETS 2026 | Lavushimanda District';
+  } else if (color === '#1a3c6e') {
+    document.title = currentMode === 'zone' ? 'Zone Submission | JETS 2026' : 'District Dashboard | JETS 2026';
+  }
 }
 
 function signOut() {
+  sessionStorage.removeItem('userPhone');
+  sessionStorage.removeItem('userRole');
+  sessionStorage.removeItem('schoolInfo');
   sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY + '_dl');
   authData = null;
   lockAllButtons();
   document.getElementById('landing-phone').value = '';

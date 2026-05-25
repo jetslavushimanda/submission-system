@@ -12,6 +12,8 @@ const Dashboard = (() => {
   const CACHE_MS       = 5 * 60 * 1000;  // 5 minutes
   const FEED_REFRESH_S = 60 * 1000;       // 60 seconds
 
+  let _activeDrawerId = null; // Currently open drawer identifier
+
   const ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
 
   // Innovation categories (matches data.js)
@@ -43,6 +45,7 @@ const Dashboard = (() => {
     _data     = null;
     _allSubs  = null;
     _cacheTime = 0;
+    _activeDrawerId = null;
 
     if (auth.role !== 'District') {
       App.setPageHTML(pageId, deniedHTML());
@@ -106,29 +109,21 @@ const Dashboard = (() => {
   }
 
   function skeletonHTML() {
-    const sk = `<div class="db-skeleton"></div>`;
     return `
-<div class="db-section">
-  <div class="db-section-title">Overview</div>
-  <div class="db-skeleton-counters">
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-    <div class="db-skeleton db-skeleton-counter"></div>
-  </div>
+<div class="db-button-grid">
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
+  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
 </div>
-<div class="db-section">
-  <div class="db-section-title">Zone Progress</div>
-  <div style="padding:12px">
-    ${[1,2,3,4,5].map(() => `<div class="db-skeleton db-skeleton-zone"></div>`).join('')}
-  </div>
+<div style="text-align: center; margin-top: 24px; color: var(--db-navy); font-weight: 600;">
+  Loading dashboard data...
 </div>
-<div class="db-section">
-  <div class="db-section-title">School Status (42 schools)</div>
-  <div style="padding:12px">
-    ${[1,2,3,4,5,6].map(() => `<div class="db-skeleton db-skeleton-row"></div>`).join('')}
-  </div>
-</div>`;
+`;
   }
 
   // ── Data Loading ──────────────────────────────────────────────
@@ -176,7 +171,17 @@ const Dashboard = (() => {
       const data = await res.json();
       if (data.status === 'ok') {
         const feedEl = document.getElementById('db-feed-list');
-        if (feedEl) feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
+        if (feedEl) {
+          feedEl.innerHTML = buildFeedItems(data.recentFeed || []);
+          // Re-bind delete buttons in feed
+          feedEl.querySelectorAll('.btn-feed-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const d = btn.dataset;
+              promptDelete(d.ref, d.participant, d.school, d.category);
+            });
+          });
+        }
         const tick = document.getElementById('db-feed-tick');
         if (tick) tick.textContent = 'Feed refreshed ' + fmtTimeShort(new Date().toISOString());
       }
@@ -187,7 +192,58 @@ const Dashboard = (() => {
     const btn = document.getElementById('db-refresh-btn');
     if (!btn) return;
     btn.disabled    = loading;
-    btn.textContent = loading ? '&#8635; Loading…' : '&#8635; Refresh';
+    btn.textContent = loading ? 'Loading…' : 'Refresh';
+  }
+
+  // ── Drawer Management ──────────────────────────────────────────
+  async function openDrawer(drawerId) {
+    const now = Date.now();
+    if (!_data || (now - _cacheTime) >= CACHE_MS) {
+      showGlobalLoader();
+      try {
+        await loadFullData(true);
+      } catch (err) {
+        hideGlobalLoader();
+        alert("Failed to load dashboard: " + err.message);
+        return;
+      }
+      hideGlobalLoader();
+    }
+    activateDrawer(drawerId);
+  }
+
+  function activateDrawer(drawerId) {
+    closeActiveDrawer(true);
+    const drawer = document.getElementById('drawer-' + drawerId);
+    const backdrop = document.getElementById('db-backdrop');
+    if (drawer && backdrop) {
+      drawer.classList.add('active');
+      backdrop.classList.add('active');
+      _activeDrawerId = drawerId;
+    }
+  }
+
+  function closeActiveDrawer(isSwapping) {
+    document.querySelectorAll('.bottom-drawer').forEach(d => d.classList.remove('active'));
+    const backdrop = document.getElementById('db-backdrop');
+    if (backdrop) backdrop.classList.remove('active');
+    if (!isSwapping) {
+      _activeDrawerId = null;
+    }
+  }
+
+  function closeDeleteDrawer() {
+    closeActiveDrawer();
+  }
+
+  function showGlobalLoader() {
+    const el = document.getElementById('db-global-loader');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function hideGlobalLoader() {
+    const el = document.getElementById('db-global-loader');
+    if (el) el.classList.add('hidden');
   }
 
   // ── Render All Sections ───────────────────────────────────────
@@ -200,22 +256,194 @@ const Dashboard = (() => {
     const corrections = data.corrections || [];
 
     body.innerHTML = `
-${renderCorrections(corrections)}
-${renderOverview(data.overview)}
-${renderZones(data.zones)}
-${renderSchoolList(data.schoolList)}
-${renderFeed(data.recentFeed)}
-${renderCoverage(data.coverage)}
-${renderSkills(data.skills)}
-${renderActions(data)}
-${renderOrganiserMgmt()}
-${renderDeadlineMgmt()}`;
+<!-- Button Grid -->
+<div class="db-button-grid">
+  <button class="db-grid-btn btn-overview" onclick="Dashboard.openDrawer('overview')">
+    <span class="db-btn-icon">📊</span>
+    <span class="db-btn-text">Overview</span>
+  </button>
+  <button class="db-grid-btn btn-zone" onclick="Dashboard.openDrawer('zone')">
+    <span class="db-btn-icon">📍</span>
+    <span class="db-btn-text">Zone Progress</span>
+  </button>
+  <button class="db-grid-btn btn-school" onclick="Dashboard.openDrawer('school')">
+    <span class="db-btn-icon">🏫</span>
+    <span class="db-btn-text">School Status</span>
+  </button>
+  <button class="db-grid-btn btn-feed" onclick="Dashboard.openDrawer('feed')">
+    <span class="db-btn-icon">🔔</span>
+    <span class="db-btn-text">Recent Feed</span>
+  </button>
+  <button class="db-grid-btn btn-coverage" onclick="Dashboard.openDrawer('coverage')">
+    <span class="db-btn-icon">📈</span>
+    <span class="db-btn-text">Category Coverage</span>
+  </button>
+  <button class="db-grid-btn btn-skills" onclick="Dashboard.openDrawer('skills')">
+    <span class="db-btn-icon">🛠️</span>
+    <span class="db-btn-text">Skills Tracker</span>
+  </button>
+  <button class="db-grid-btn btn-admin" onclick="Dashboard.openDrawer('admin')">
+    <span class="db-btn-icon">🛡️</span>
+    <span class="db-btn-text">Admin Panel</span>
+  </button>
+  <button class="db-grid-btn btn-settings" onclick="Dashboard.openDrawer('settings')">
+    <span class="db-btn-icon">⚙️</span>
+    <span class="db-btn-text">Actions & Settings</span>
+  </button>
+</div>
+
+<!-- Shared Backdrop Overlay -->
+<div id="db-backdrop" class="db-backdrop" onclick="Dashboard.closeActiveDrawer()"></div>
+
+<!-- Drawer 1: Overview -->
+<div id="drawer-overview" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Overview Statistics</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderOverview(data.overview)}
+  </div>
+</div>
+
+<!-- Drawer 2: Zone Progress -->
+<div id="drawer-zone" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Zone Submission Progress</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderZones(data.zones)}
+  </div>
+</div>
+
+<!-- Drawer 3: School Status -->
+<div id="drawer-school" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">School Status & Submissions</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderSchoolList(data.schoolList)}
+  </div>
+</div>
+
+<!-- Drawer 4: Recent Feed -->
+<div id="drawer-feed" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Recent Submissions Feed</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderFeed(data.recentFeed)}
+  </div>
+</div>
+
+<!-- Drawer 5: Category Coverage -->
+<div id="drawer-coverage" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Category Coverage by Zone</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderCoverage(data.coverage)}
+  </div>
+</div>
+
+<!-- Drawer 6: Skills Tracker -->
+<div id="drawer-skills" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Technical Skills Tracker</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderSkills(data.skills)}
+  </div>
+</div>
+
+<!-- Drawer 7: Admin Panel (Corrections, Organiser Mgmt, Deadline Mgmt) -->
+<div id="drawer-admin" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Admin Panel</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderCorrections(corrections)}
+    ${renderOrganiserMgmt()}
+    ${renderDeadlineMgmt()}
+  </div>
+</div>
+
+<!-- Drawer 8: Actions & Settings -->
+<div id="drawer-settings" class="bottom-drawer">
+  <div class="drawer-header">
+    <span class="drawer-title">Quick Actions & Settings</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    ${renderActions(data)}
+  </div>
+</div>
+
+<!-- Deletion Confirmation Drawer -->
+<div id="drawer-delete-confirm" class="bottom-drawer">
+  <div class="drawer-header" style="background:#e74c3c;color:#fff">
+    <span class="drawer-title">Confirm Deletion</span>
+    <button class="btn-close-drawer" onclick="Dashboard.closeDeleteDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body" style="padding:16px">
+    <div style="margin-bottom:12px; font-size:14px; color:#555;">
+      Are you sure you want to delete the following submission? This action is permanent and will remove the record from the database.
+    </div>
+    <div class="delete-sub-details" style="background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:16px; border-left:4px solid #e74c3c; font-size:13px; line-height:1.6;">
+      <div><strong>Ref#:</strong> <span id="del-ref" style="font-family:monospace; font-weight:bold;"></span></div>
+      <div><strong>Participant:</strong> <span id="del-participant" style="font-weight:bold;"></span></div>
+      <div><strong>School:</strong> <span id="del-school" style="font-weight:bold;"></span></div>
+      <div><strong>Category:</strong> <span id="del-category" style="font-weight:bold;"></span></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-weight:bold; margin-bottom:6px; font-size:13px; color:#333;">Reason for Deletion *</label>
+      <textarea id="del-reason" style="width:100%; height:80px; padding:10px; border:1.5px solid #ccc; border-radius:6px; font-family:inherit; resize:none; outline:none; font-size:13px;" placeholder="Please type a detailed reason for this deletion (required)"></textarea>
+    </div>
+    <div style="display:flex; gap:12px;">
+      <button id="btn-confirm-delete" class="db-action-btn db-action-primary" style="background:#e74c3c; flex:1; box-shadow:none; padding:12px; font-size:13px;">DELETE NOW</button>
+      <button id="btn-cancel-delete" class="db-action-btn db-action-outline" style="flex:1; border-color:#ccc; color:#555; padding:12px; font-size:13px;" onclick="Dashboard.closeDeleteDrawer()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Global Overlay Loader -->
+<div id="db-global-loader" class="db-global-loader hidden">
+  <div class="db-spinner"></div>
+  <div class="db-loader-text">Fetching latest data...</div>
+</div>
+`;
 
     bindSchoolSearch();
     bindZoneToggles();
     bindSchoolRows();
     bindCorrectionButtons();
     bindDeadlineMgmt();
+
+    // Bind the delete buttons in Recent Feed
+    document.querySelectorAll('.btn-feed-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const d = btn.dataset;
+        promptDelete(d.ref, d.participant, d.school, d.category);
+      });
+    });
+
+    // Re-active active drawer if it was set
+    if (_activeDrawerId) {
+      const drawer = document.getElementById('drawer-' + _activeDrawerId);
+      const backdrop = document.getElementById('db-backdrop');
+      if (drawer && backdrop) {
+        drawer.classList.add('active');
+        backdrop.classList.add('active');
+      }
+    }
+
     // Load organisers async after DOM is ready
     loadOrganisers();
   }
@@ -236,7 +464,7 @@ ${renderDeadlineMgmt()}`;
 ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
     return `
-<div class="db-section db-section-corrections">
+<div class="db-section db-section-corrections" style="margin-bottom: 24px;">
   <div class="db-section-title">Pending Corrections ${badge}</div>
   <div class="db-corr-body">
     ${pendingCards}
@@ -429,11 +657,6 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
         ? '<span class="db-feed-source-badge db-src-zone">ZONE</span>'
         : '<span class="db-feed-source-badge db-src-school">SCHOOL</span>';
       return `
-<div class="db-feed-item">
-  <div class="db-feed-time">${fmtTimeShort(f.time)}<br><span style="font-size:10px;color:#bbb">${fmtDate(f.time)}</span></div>
-  <div>
-    <div class="db-feed-school">${esc(f.school)}${srcBadge}</div>
-    <div class="db-feed-meta">${esc(f.participant)} &mdash; ${esc(f.type)}</div>
     <div class="db-feed-ref">${esc(f.category)} &nbsp;&bull;&nbsp; ${esc(f.ref)}</div>
   </div>
 </div>`;

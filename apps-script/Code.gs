@@ -22,6 +22,17 @@
 var SHEET_ID        = PropertiesService.getScriptProperties().getProperty('SHEET_ID')        || 'YOUR_GOOGLE_SHEET_ID_HERE';
 var DRIVE_FOLDER_ID = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID') || 'YOUR_DRIVE_FOLDER_ID_HERE';
 
+var ss;
+try {
+  ss = SpreadsheetApp.openById(SHEET_ID);
+} catch (e) {
+  Logger.log("Spreadsheet not loaded yet or invalid SHEET_ID. Safe to ignore during initial setupSystem() run.");
+}
+
+function getSpreadsheet_() {
+  return ss;
+}
+
 // Sheet tab names — must match the actual tab names exactly.
 const TAB_REGISTERED  = "Registered Schools";   // Tab 1
 const TAB_SCHOOL_SUB  = "School Submissions";   // Tab 2
@@ -50,11 +61,11 @@ function doGet(e) {
 // Every response goes through the same JSON/MIME path so CORS
 // headers are applied uniformly.
 function doPost(e) {
-  var result;
-
+  var response;
   try {
     var payload = JSON.parse(e.postData.contents);
     var action  = payload.action;
+    var result;
 
     if (action === "checkAuth" || action === "checkRegistration") {
       // auth.gs — Tab 1 lookup by phone number.
@@ -80,6 +91,30 @@ function doPost(e) {
         };
       }
 
+    } else if (action === "getInitData") {
+      // FIX 6: Batch call — returns auth result + deadlines in a single round-trip.
+      // Replaces the separate checkAuth + getDeadlines calls on login.
+      var auth = checkRegistration(payload.phone);
+      if (auth.found === true) {
+        var dlResult = getDeadlines_();
+        result = {
+          status:        'found',
+          zone:          auth.zone,
+          schoolName:    auth.schoolName,
+          schoolType:    auth.schoolType,
+          organiserName: auth.organiserName,
+          phone:         auth.phone,
+          role:          auth.role,
+          deadlines:     (dlResult.status === 'ok' && dlResult.deadlines) ? dlResult.deadlines : {},
+        };
+      } else {
+        result = {
+          status:  'not_found',
+          reason:  auth.reason  || '',
+          message: auth.message || '',
+        };
+      }
+
     } else if (action === "submitSchool") {
       var authCheck = checkRegistration(payload.phone);
       if (!authCheck.found || (authCheck.role !== 'School' && authCheck.role !== 'District')) {
@@ -95,6 +130,15 @@ function doPost(e) {
         result = { status: 'error', message: 'Unauthorized. Access denied.' };
       } else {
         result = submitZoneParticipant(payload);
+        if (result.status === 'ok') updateDashboard_();
+      }
+
+    } else if (action === "adminDeleteSubmission") {
+      var authCheck = checkRegistration(payload.phone);
+      if (!authCheck.found || authCheck.role !== 'District') {
+        result = { status: 'error', message: 'Unauthorized. District access only.' };
+      } else {
+        result = adminDeleteSubmission_(payload);
         if (result.status === 'ok') updateDashboard_();
       }
 
@@ -249,12 +293,13 @@ function doPost(e) {
       result = { status: "error", message: "Unknown action: " + action };
     }
 
-  } catch (err) {
-    result = { status: "error", message: "Server error: " + err.message };
+    response = result;
+  } catch (error) {
+    response = { status: 'error', success: false, error: error.message };
   }
 
   return ContentService
-    .createTextOutput(JSON.stringify(result))
+    .createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -1041,7 +1086,7 @@ function getProgressData_(payload, auth) {
 
 // ── Internal helpers ──────────────────────────────────────────
 function openSheet_(tabName) {
-  return SpreadsheetApp.openById(SHEET_ID).getSheetByName(tabName);
+  return getSpreadsheet_().getSheetByName(tabName);
 }
 
 function trim_(val) {
