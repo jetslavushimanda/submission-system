@@ -84,13 +84,13 @@ const SchoolForm = (() => {
 
   <header class="sf-header">
     <div class="sf-header-logos">
-      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo">
+      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
       <div class="sf-header-text">
         <p class="sf-h-title">JETS 2026 SUBMISSION SYSTEM</p>
         <p class="sf-h-sub">School Submission Form</p>
         <p class="sf-h-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
       </div>
-      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo">
+      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
     </div>
     <div class="sf-signedin-bar">
       Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong> &mdash; ${_auth.organiserName}
@@ -951,35 +951,25 @@ const SchoolForm = (() => {
 
     try {
       if (fileDataInMemory.base64) {
-        payload.reportFileBase64 = fileDataInMemory.base64;
-        payload.reportFileName   = fileDataInMemory.name;
-        payload.reportFileType   = fileDataInMemory.type;
+        btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
+        const fileRes = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action:   'uploadFile',
+            phone:    _auth.phone,
+            base64:   fileDataInMemory.base64,
+            fileName: fileDataInMemory.name,
+            mimeType: fileDataInMemory.type
+          }),
+        });
+        if (!fileRes.ok) throw new Error('Report upload failed: ' + fileRes.status);
+        const fileData = await fileRes.json();
+        if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
+        payload.fileUrl = fileData.url;
       }
 
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'submitSchool', ...payload }),
-      });
-      if (!res.ok) throw new Error('Server error (' + res.status + ').');
-      const data = await res.json();
-
-      if (data.status === 'duplicate') {
-        showDuplicateWarningBanner({ ...payload, refNumber: data.refNumber });
-        _submitting = false;
-        btn.disabled = false;
-        btn.innerHTML = 'SUBMIT PARTICIPANT';
-        return;
-      }
-
-      if (data.status === 'full') {
-        // Refresh quotas
-        fetchExistingSubmissions();
-        alert('This slot has already filled up. Submission aborted.');
-        _submitting = false;
-        btn.disabled = false;
-        btn.innerHTML = 'SUBMIT PARTICIPANT';
-        return;
-      }
+      btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
+      const data = await FirestoreDB.submitSchool(payload);
 
       if (data.status !== 'ok') throw new Error(data.message || 'Submission failed.');
 
@@ -1149,12 +1139,8 @@ const SchoolForm = (() => {
   // ── Slot Counter ──────────────────────────────────────────────
   async function loadSlotCount() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getCount', phone: _auth.phone, schoolName: _auth.schoolName }),
-      });
-      const data = await res.json();
-      if (typeof data.count === 'number') updateSlot(data.count);
+      const data = await FirestoreDB.getSchoolCount(_auth.phone, _auth.schoolName);
+      if (typeof data.total === 'number') updateSlot(data.total);
     } catch (_) {
       const el = document.getElementById('sf-slot-display');
       if (el) el.innerHTML = '&#8212; of ' + _slotTotal;
@@ -1176,15 +1162,9 @@ const SchoolForm = (() => {
   // ── Submission list loader for quota checking ──
   async function fetchExistingSubmissions() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'getSubmissionHistory',
-          phone:  _auth.phone,
-          source: 'school',
-        }),
-      });
-      const data = await res.json();
+      const data = await FirestoreDB.getSubmissionHistory(
+        _auth.phone, 'school', _auth.zone, _auth.schoolName
+      );
       if (data.status === 'ok') {
         existingSubmissions = data.rows || [];
       }
@@ -1194,11 +1174,9 @@ const SchoolForm = (() => {
   // ── Progress Bars ─────────────────────────────────────────────
   async function loadProgressData() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getProgressData', phone: _auth.phone, source: 'school' }),
-      });
-      const data = await res.json();
+      const data = await FirestoreDB.getProgressData(
+        _auth.phone, 'school', _auth.zone, _auth.schoolName
+      );
       if (data.status !== 'ok') throw new Error(data.message);
       renderProgressBars(data);
       const loading = document.getElementById('sf-progress-loading');

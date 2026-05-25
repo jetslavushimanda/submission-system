@@ -153,15 +153,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Load Live Deadlines ───────────────────────────────────────
-// FIX 5: Read from sessionStorage first — avoids a round-trip on every page load.
+// Reads deadlines from Firestore (fast, no cold start).
 async function loadDeadlines() {
   const cached = sessionStorage.getItem(SESSION_KEY + '_dl');
   if (cached) {
     try { applyDeadlines(JSON.parse(cached)); return; } catch (_) {}
   }
   try {
-    const data = await postWithTimeout({ action: 'getDeadlines' }, 8000);
-    if (data.status === 'ok' && data.deadlines) {
+    const data = await FirestoreDB.getDeadlines();
+    if (data.status === 'ok' && data.deadlines && Object.keys(data.deadlines).length) {
       applyDeadlines(data.deadlines);
       sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
     }

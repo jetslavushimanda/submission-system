@@ -29,12 +29,11 @@ if (!firebase.apps.length) {
 const db = firebase.firestore();
 
 // ── Collections ───────────────────────────────────────────────
-const COL_REGISTRATIONS   = 'registered_schools';
+const COL_REGISTRATIONS   = 'registrations';
 const COL_SCHOOL_SUBS     = 'school_submissions';
 const COL_ZONE_SUBS       = 'zone_submissions';
 const COL_SETTINGS        = 'settings';
 const COL_CORRECTIONS     = 'correction_requests';
-const COL_DELETED_LOG     = 'deleted_log';
 
 // ═══════════════════════════════════════════════════════════════
 // FirestoreDB — public API used by all modules
@@ -45,17 +44,7 @@ const FirestoreDB = (() => {
   async function getDeadlines() {
     try {
       const doc = await db.collection(COL_SETTINGS).doc('deadlines').get();
-      if (doc.exists) {
-        const raw = doc.data();
-        // Normalize: support both camelCase (spec) and PascalCase_underscore (code)
-        const dl = {
-          School_Open:  raw.School_Open  || raw.schoolOpen  || '',
-          School_Close: raw.School_Close || raw.schoolClose || '',
-          Zone_Open:    raw.Zone_Open    || raw.zoneOpen    || '',
-          Zone_Close:   raw.Zone_Close   || raw.zoneClose   || '',
-        };
-        return { status: 'ok', deadlines: dl };
-      }
+      if (doc.exists) return { status: 'ok', deadlines: doc.data() };
     } catch (e) { console.warn('getDeadlines failed', e); }
     return { status: 'ok', deadlines: {} };
   }
@@ -77,19 +66,7 @@ const FirestoreDB = (() => {
         .get();
       if (!snap.empty) {
         const d = snap.docs[0].data();
-        const docStatus = (d.status || 'Active').trim();
-        if (docStatus.toLowerCase() === 'inactive') {
-          return { status: 'inactive' };
-        }
-        return {
-          status:        'found',
-          role:          d.role          || '',
-          zone:          d.zone          || '',
-          schoolName:    d.schoolName    || d.name      || '',
-          schoolType:    d.schoolType    || d.type      || '',
-          organiserName: d.organiserName || d.organiser || '',
-          phone:         d.phone         || phone,
-        };
+        return { status: 'found', ...d };
       }
     } catch (e) { console.warn('getRegistration failed', e); }
     return { status: 'not_found' };
@@ -193,7 +170,7 @@ const FirestoreDB = (() => {
     try {
       const tsMs = Date.now();
       const rand = Math.floor(1000 + Math.random() * 9000);
-      const refNumber = 'ZON-' + tsMs + '-' + rand;
+      const refNumber = 'ZN-' + tsMs + '-' + rand;
 
       payload.timestamp = new Date().toISOString();
       payload.ref = refNumber;
@@ -238,11 +215,11 @@ const FirestoreDB = (() => {
       const coordReg  = {};
       reg.forEach(r => {
         const role = (r.role || '').trim();
-        const name = (r.schoolName || r.name || '').trim();
+        const name = (r.name || r.schoolName || r.organiser || '').trim();
         if (role === 'School') {
-          schoolReg[name] = { zone: r.zone, type: r.schoolType || r.type, status: r.status };
+          schoolReg[name] = { zone: r.zone, type: r.type || r.schoolType, status: r.status };
         } else if (role === 'Zone') {
-          coordReg[r.zone] = { name: r.organiserName || r.organiser || r.name, phone: r.phone };
+          coordReg[r.zone] = { name: r.organiser || r.name, phone: r.phone };
         }
       });
 
@@ -348,17 +325,6 @@ const FirestoreDB = (() => {
 
       const corrections = corrSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      let driveUrl = '';
-      if (settSnap && settSnap.exists) {
-        driveUrl = settSnap.data().driveUrl || '';
-      }
-      if (!driveUrl) {
-        try {
-          const session = JSON.parse(sessionStorage.getItem('jets_session') || '{}');
-          driveUrl = session.driveUrl || '';
-        } catch (_) {}
-      }
-
       return {
         status:   'ok',
         cachedAt: new Date().toISOString(),
@@ -373,9 +339,7 @@ const FirestoreDB = (() => {
         recentFeed: allSubs.slice(0, 20),
         allSubs, coverage, skills,
         corrections, allSchoolRecords,
-        schoolSubmissions: s2,
-        zoneSubmissions:   s3,
-        driveUrl:       driveUrl,
+        driveUrl:       '',
         exportUrl:      '',
         exportSchoolUrl:'',
         exportZoneUrl:  '',
@@ -461,29 +425,6 @@ const FirestoreDB = (() => {
     } catch (e) { console.error('adminUpdateOrganiser failed', e); throw e; }
   }
 
-  // ── Delete a submission and log it ───────────────────────────
-  async function deleteSubmission(ref, source, deletedBy, reason, details) {
-    try {
-      const col = source === 'Zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
-      await db.collection(col).doc(ref).delete();
-      await db.collection(COL_DELETED_LOG).add({
-        originalRef: ref,
-        collection:  col,
-        source:      source,
-        participant: details.participant || '',
-        school:      details.school     || '',
-        category:    details.category   || '',
-        reason:      reason,
-        deletedBy:   deletedBy,
-        deletedAt:   new Date().toISOString(),
-      });
-      return { status: 'ok' };
-    } catch (e) {
-      console.error('deleteSubmission failed', e);
-      throw e;
-    }
-  }
-
   // ── Admin: handle correction decision ─────────────────────────
   async function handleCorrectionDecision(correctionId, decision, note) {
     try {
@@ -508,7 +449,6 @@ const FirestoreDB = (() => {
     submitSchool,
     submitZone,
     submitCorrectionRequest,
-    deleteSubmission,
     getFullDashboard,
     getRecentFeed,
     adminGetAllOrganisers,

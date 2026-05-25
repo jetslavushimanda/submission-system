@@ -54,18 +54,14 @@ const WelcomeStats = (() => {
     
     if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     
-    // Render skeleton only if not already rendering it or data
     if (!container.querySelector('.ws-skeleton') && !container.querySelector('.ws-greet')) {
       _skeleton();
     }
     
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getWelcomeStats', phone: _auth.phone }),
-      });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const data = await res.json();
+      const data = await FirestoreDB.getWelcomeStats(
+        _auth.phone, _auth.role, _auth.zone, _auth.schoolName
+      );
       if (data.status !== 'ok') throw new Error(data.message || 'Failed');
       try { sessionStorage.setItem(cacheKey(), JSON.stringify(data)); } catch (_) {}
       _render(data);
