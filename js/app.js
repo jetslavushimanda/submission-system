@@ -7,6 +7,25 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREF
 
 const SESSION_KEY = "jets_session";
 
+async function postWithTimeout(body, ms) {
+  ms = ms || 10000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      body:   JSON.stringify(body),
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 // ── Submission Deadlines ──────────────────────────────────────
 // Initialized to default values; refreshed from Settings tab on boot.
 let _deadlineSchoolOpen  = new Date("2026-05-26T00:00:00");
@@ -164,7 +183,7 @@ function clearSession() {
   sessionStorage.removeItem(SESSION_KEY + '_dl');
 }
 
-// ── Phone Verification — queries Firestore registered_schools directly ──
+// ── Phone Verification ────────────────────────────────────────
 async function verifyPhone() {
   const input = document.getElementById('landing-phone');
   const msgEl = document.getElementById('landing-auth-msg');
@@ -176,71 +195,51 @@ async function verifyPhone() {
     return;
   }
 
-  // Return cached session immediately if same phone
-  const cachedPhone = sessionStorage.getItem('userPhone');
-  const cachedRole  = sessionStorage.getItem('userRole');
-  const cachedInfo  = sessionStorage.getItem('schoolInfo');
-  if (cachedPhone === phone && cachedRole && cachedInfo) {
-    try {
-      const info = JSON.parse(cachedInfo);
-      authData = { phone, role: cachedRole, ...info };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
-      applyRoleUI(cachedRole);
-      msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${info.organiserName}</strong> &mdash; ${roleLabel(cachedRole)}</p>`;
-      if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-      return;
-    } catch (_) {}
-  }
-
   btn.disabled    = true;
   btn.textContent = 'Checking…';
   msgEl.innerHTML = '';
 
   try {
-    const snap = await db.collection('registered_schools')
-      .where('phone', '==', phone)
-      .limit(1)
-      .get();
+    const data = await postWithTimeout({ action: 'getInitData', phone }, 12000);
 
-    if (snap.empty) {
-      authData = null;
-      clearSession();
-      lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
-      return;
-    }
+    if (data.status === 'found') {
+      authData = { phone, ...data };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
+      sessionStorage.setItem('userPhone', phone);
+      sessionStorage.setItem('userRole', data.role);
+      sessionStorage.setItem('schoolInfo', JSON.stringify({
+        zone: data.zone,
+        schoolName: data.schoolName,
+        schoolType: data.schoolType,
+        organiserName: data.organiserName
+      }));
+      if (data.deadlines && Object.keys(data.deadlines).length) {
+        applyDeadlines(data.deadlines);
+        sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
+      }
+      applyRoleUI(data.role);
+      msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
+      if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
 
-    const d = snap.docs[0].data();
-    const docStatus = (d.status || 'Active').trim().toLowerCase();
-
-    if (docStatus === 'inactive') {
+    } else if (data.reason === 'inactive') {
       authData = null;
       clearSession();
       lockAllButtons();
       msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
-      return;
+
+    } else {
+      authData = null;
+      clearSession();
+      lockAllButtons();
+      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
     }
 
-    const schoolInfo = {
-      zone:          d.zone          || '',
-      schoolName:    d.schoolName    || d.name      || '',
-      schoolType:    d.schoolType    || d.type      || '',
-      organiserName: d.organiserName || d.organiser || '',
-    };
-
-    authData = { phone, role: d.role, ...schoolInfo };
-
-    sessionStorage.setItem('userPhone',   phone);
-    sessionStorage.setItem('userRole',    d.role);
-    sessionStorage.setItem('schoolInfo',  JSON.stringify(schoolInfo));
-    sessionStorage.setItem(SESSION_KEY,   JSON.stringify(authData));
-
-    applyRoleUI(d.role);
-    msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${schoolInfo.organiserName}</strong> &mdash; ${roleLabel(d.role)}</p>`;
-    if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-
   } catch (err) {
-    msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
+    if (err.name === 'AbortError') {
+      msgEl.innerHTML = '<p class="auth-msg-error">Connection timeout. Check your internet and try again.</p>';
+    } else {
+      msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
+    }
   } finally {
     btn.disabled    = false;
     btn.textContent = 'PROCEED';
