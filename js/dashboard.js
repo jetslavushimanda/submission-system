@@ -1633,6 +1633,9 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
   return {
     render,
     destroy,
+    openDrawer,
+    closeActiveDrawer,
+    closeDeleteDrawer,
     _manualRefresh: () => loadFullData(true),
     _reloadOrg:     () => loadOrganisers(),
   };

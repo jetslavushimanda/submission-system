@@ -84,13 +84,13 @@ const SchoolForm = (() => {
 
   <header class="sf-header">
     <div class="sf-header-logos">
-      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo">
+      <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
       <div class="sf-header-text">
         <p class="sf-h-title">JETS 2026 SUBMISSION SYSTEM</p>
         <p class="sf-h-sub">School Submission Form</p>
         <p class="sf-h-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
       </div>
-      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo">
+      <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo" onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
     </div>
     <div class="sf-signedin-bar">
       Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong> &mdash; ${_auth.organiserName}
