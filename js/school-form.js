@@ -52,14 +52,14 @@ const SchoolForm = (() => {
 <header class="sf-header">
   <div class="sf-header-logos">
     <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="sf-logo"
-         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>GRZ</span>'">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
     <div class="sf-header-text">
-      <p class="sf-h-title">JETS 2024&#8211;2026</p>
+      <p class="sf-h-title">JETS 2026 SUBMISSION SYSTEM</p>
       <p class="sf-h-sub">School Submission Form</p>
       <p class="sf-h-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
     </div>
     <img src="assets/jets-logo.png" alt="JETS Logo" class="sf-logo"
-         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>JETS</span>'">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
   </div>
   <div class="sf-signedin-bar">
     Signed in as: &nbsp;<strong>${App.maskPhone(_auth.phone)}</strong>
@@ -605,7 +605,7 @@ const SchoolForm = (() => {
       if (data.status !== 'ok') throw new Error(data.message || 'Submission failed.');
 
       const waText = encodeURIComponent(
-        `JETS 2024-2026 Submission Confirmed\n` +
+        `JETS 2026 Submission Confirmed\n` +
         `Zone: ${_auth.zone}\n` +
         `School: ${_auth.schoolName}\n` +
         `Participant: ${payload.fullName}\n` +
@@ -803,29 +803,84 @@ const SchoolForm = (() => {
   function renderProgressBars(data) {
     const el = document.getElementById('sf-progress-data');
     if (!el) return;
-    const inn = data.innovations || { learner: {}, teacher: {}, youth: {} };
 
-    function barRow(cat, n) {
-      const full = n >= 1;
+    const inn         = data.innovations || { learner: {}, teacher: {}, youth: {} };
+    const acadBySL    = data.academicsBySubjectLevel || {};
+    const skillsByCat = data.skillsByCategory || {};
+
+    const levels     = LEVELS_BY_SCHOOL_TYPE[_auth.schoolType] || [];
+    const learnerMax = levels.length || 1;
+    const hasSkills  = _auth.schoolType !== 'Primary School' && _auth.schoolType !== 'Community School';
+
+    function barRow(label, n, max) {
+      const pct      = max > 0 ? Math.min(100, Math.round((n / max) * 100)) : 0;
+      const isDone   = max > 0 && n >= max;
+      const isOver   = n > max;
+      const barClass = isOver ? 'sf-prog-bar-over'
+                     : isDone ? 'sf-prog-bar-full'
+                     : n > 0  ? 'sf-prog-bar-partial'
+                     : '';
+      const cntClass = isOver ? ' sf-prog-count-over' : isDone ? ' sf-prog-count-done' : '';
+      const badge    = isDone && !isOver ? ' &#10003; DONE' : isOver ? ' &#9888;' : '';
       return `<div class="sf-prog-row">
-        <span class="sf-prog-label">${cat}</span>
-        <div class="sf-prog-bar-wrap"><div class="sf-prog-bar${full ? ' sf-prog-bar-full' : ''}" style="width:${full ? 100 : 0}%"></div></div>
-        <span class="sf-prog-count${full ? ' sf-prog-count-done' : ''}">${n}/1${full ? ' &#10003;' : ''}</span>
+        <span class="sf-prog-label">${label}</span>
+        <div class="sf-prog-bar-wrap"><div class="sf-prog-bar ${barClass}" style="width:${isDone || isOver ? 100 : pct}%"></div></div>
+        <span class="sf-prog-count${cntClass}">${n}/${max}${badge}</span>
       </div>`;
     }
 
-    function section(title, counts) {
-      const rows = INNOVATION_CATEGORIES.map(c => barRow(c, counts[c] || 0)).join('');
-      return `<div class="sf-prog-section"><div class="sf-prog-section-title">${title}</div>${rows}</div>`;
+    function innovSection(title, counts, max) {
+      const used = INNOVATION_CATEGORIES.reduce((a, c) => a + (counts[c] || 0), 0);
+      const tot  = INNOVATION_CATEGORIES.length * max;
+      const rows = INNOVATION_CATEGORIES.map(c => barRow(c, counts[c] || 0, max)).join('');
+      return `<div class="sf-prog-section">
+        <div class="sf-prog-section-title">${title} (${used}/${tot})</div>${rows}
+      </div>`;
+    }
+
+    // Academics: one bar per (level, subject) applicable to this school type
+    let acadRowsHtml = '', acadTotal = 0, acadMax = 0;
+    levels.forEach(level => {
+      (ACADEMICS_BY_LEVEL[level] || []).forEach(subj => {
+        const key    = level + ':' + subj;
+        const n      = acadBySL[key] || 0;
+        const lShort = level === 'ECE & Primary' ? 'ECE/Prim'
+                     : level === 'Junior Secondary' ? 'Junior' : 'Senior';
+        const label  = subj.replace('Quiz & Olympiads — ', '') + ' (' + lShort + ')';
+        acadTotal   += n;
+        acadMax     += 1;
+        acadRowsHtml += barRow(label, n, 1);
+      });
+    });
+    const acadHtml = acadMax > 0
+      ? `<div class="sf-prog-section">
+        <div class="sf-prog-section-title">Academics / Quiz &amp; Olympiads (${acadTotal}/${acadMax})</div>
+        ${acadRowsHtml}
+      </div>`
+      : '';
+
+    // Skills: hidden for Primary and Community schools
+    let skillsHtml = '';
+    if (hasSkills) {
+      let skillTotal = 0, skillMax = 0, skillRowsHtml = '';
+      Object.entries(SKILLS).forEach(([cat, info]) => {
+        const n = skillsByCat[cat] || 0;
+        skillTotal += n;
+        skillMax   += info.slots;
+        skillRowsHtml += barRow(cat, n, info.slots);
+      });
+      skillsHtml = `<div class="sf-prog-section">
+        <div class="sf-prog-section-title">Technical Skills (${skillTotal}/${skillMax})</div>
+        ${skillRowsHtml}
+      </div>`;
     }
 
     el.innerHTML =
-      section('Learner Innovations', inn.learner || {}) +
-      section('Teacher Innovations', inn.teacher || {}) +
-      section('Out-of-School Youth Innovations', inn.youth || {}) +
+      innovSection('Learner Innovations', inn.learner || {}, learnerMax) +
+      innovSection('Teacher Innovations', inn.teacher || {}, 1) +
+      innovSection('Out-of-School Youth Innovations', inn.youth || {}, 1) +
+      acadHtml + skillsHtml +
       `<div class="sf-prog-totals">
-        <div class="sf-prog-total-row"><span>Academics submitted:</span><span>${data.academics || 0}</span></div>
-        <div class="sf-prog-total-row"><span>Skills submitted:</span><span>${data.skills || 0}</span></div>
         <div class="sf-prog-total-row sf-prog-total-main"><span>Total slots used:</span><span>${data.total || 0} of ${_slotTotal}</span></div>
       </div>`;
   }

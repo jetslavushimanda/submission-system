@@ -936,7 +936,7 @@ function getWelcomeStats_(payload) {
 
 // ── getProgressData_ ──────────────────────────────────────────
 // Returns per-category innovation counts broken down by participant type
-// (Learner / Teacher / Youth) plus academics and skills totals.
+// (Learner / Teacher / Youth) plus academics by subject+level and skills by category.
 // source='school' filters Tab 2 by phone; source='zone' filters Tab 3 by zone.
 function getProgressData_(payload, auth) {
   var source = payload.source; // 'school' or 'zone'
@@ -960,23 +960,32 @@ function getProgressData_(payload, auth) {
     innov.youth[CAT_KEYS[ci]]   = 0;
   }
   var academics = 0, skills = 0, total = 0;
+  var academicsBySubjectLevel = {}; // key: "Level:Subject", value: count
+  var skillsByCategory = {};        // key: skill category name, value: count
 
   if (source === 'school') {
     var sheet = openSheet_(TAB_SCHOOL_SUB);
     if (!sheet || sheet.getLastRow() < 2) {
-      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0 };
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0,
+               academicsBySubjectLevel: {}, skillsByCategory: {} };
     }
     var matchPhone = trim_(auth.phone);
     var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues();
     for (var i = 0; i < data.length; i++) {
       if (trim_(data[i][6]) !== matchPhone) continue; // col G = Phone
       total++;
-      var pType = (data[i][7] || '').toString();          // col H = Participant Type
-      var cat   = (data[i][13] || '').toString().trim();  // col N = Category
+      var pType = (data[i][7]  || '').toString();          // col H = Participant Type
+      var level = (data[i][8]  || '').toString().trim();   // col I = Level
+      var cat   = (data[i][13] || '').toString().trim();   // col N = Category
       if (pType.indexOf('Technical Skills') !== -1) {
         skills++;
+        if (cat) skillsByCategory[cat] = (skillsByCategory[cat] || 0) + 1;
       } else if (pType.indexOf('Academics') !== -1 || pType.indexOf('Quiz') !== -1) {
         academics++;
+        if (level && cat) {
+          var slKey = level + ':' + cat;
+          academicsBySubjectLevel[slKey] = (academicsBySubjectLevel[slKey] || 0) + 1;
+        }
       } else if (pType === 'Teacher') {
         if (cat && innov.teacher.hasOwnProperty(cat)) innov.teacher[cat]++;
       } else if (pType.indexOf('Youth') !== -1 || pType.indexOf('Out-of-School') !== -1) {
@@ -989,19 +998,26 @@ function getProgressData_(payload, auth) {
   } else if (source === 'zone') {
     var sheet3 = openSheet_(TAB_ZONE_SUB);
     if (!sheet3 || sheet3.getLastRow() < 2) {
-      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0 };
+      return { status: 'ok', innovations: innov, academics: 0, skills: 0, total: 0,
+               academicsBySubjectLevel: {}, skillsByCategory: {} };
     }
     var zoneName = trim_(auth.zone);
     var data3 = sheet3.getRange(2, 1, sheet3.getLastRow() - 1, 14).getValues();
     for (var j = 0; j < data3.length; j++) {
       if (trim_(data3[j][2]) !== zoneName) continue;  // col C = Zone
       total++;
-      var pType3 = (data3[j][7] || '').toString();          // col H
-      var cat3   = (data3[j][13] || '').toString().trim();  // col N
+      var pType3 = (data3[j][7]  || '').toString();          // col H
+      var level3 = (data3[j][8]  || '').toString().trim();   // col I = Level
+      var cat3   = (data3[j][13] || '').toString().trim();   // col N
       if (pType3.indexOf('Technical Skills') !== -1) {
         skills++;
+        if (cat3) skillsByCategory[cat3] = (skillsByCategory[cat3] || 0) + 1;
       } else if (pType3.indexOf('Academics') !== -1 || pType3.indexOf('Quiz') !== -1) {
         academics++;
+        if (level3 && cat3) {
+          var slKey3 = level3 + ':' + cat3;
+          academicsBySubjectLevel[slKey3] = (academicsBySubjectLevel[slKey3] || 0) + 1;
+        }
       } else if (pType3 === 'Teacher') {
         if (cat3 && innov.teacher.hasOwnProperty(cat3)) innov.teacher[cat3]++;
       } else if (pType3.indexOf('Youth') !== -1 || pType3.indexOf('Out-of-School') !== -1) {
@@ -1012,7 +1028,15 @@ function getProgressData_(payload, auth) {
     }
   }
 
-  return { status: 'ok', innovations: innov, academics: academics, skills: skills, total: total };
+  return {
+    status: 'ok',
+    innovations: innov,
+    academics: academics,
+    skills: skills,
+    total: total,
+    academicsBySubjectLevel: academicsBySubjectLevel,
+    skillsByCategory: skillsByCategory,
+  };
 }
 
 // ── Internal helpers ──────────────────────────────────────────

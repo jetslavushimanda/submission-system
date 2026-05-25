@@ -86,14 +86,14 @@ const Dashboard = (() => {
 <header class="db-header">
   <div class="db-header-logos">
     <img src="assets/coat-of-arms.png" alt="Zambia Coat of Arms" class="db-logo"
-         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>GRZ</span>'">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
     <div class="db-header-text">
-      <p class="db-h-title">JETS 2024&#8211;2026 District Dashboard</p>
+      <p class="db-h-title">JETS 2026 District Dashboard</p>
       <p class="db-h-sub">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
       <p class="db-h-dist">Signed in: <strong>${App.maskPhone(_auth.phone)}</strong> &mdash; ${_auth.organiserName}</p>
     </div>
     <img src="assets/jets-logo.png" alt="JETS Logo" class="db-logo"
-         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;>JETS</span>'">
+         onerror="this.outerHTML='<span class=&quot;logo-text-fb&quot;></span>'">
   </div>
   <div class="db-meta-bar">
     <span>Last updated: <span id="db-last-updated">&#8212;</span></span>
