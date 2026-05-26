@@ -1676,6 +1676,8 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
   <div id="db-dl-msg" class="db-org-form-msg hidden"></div>
 </div>`;
+  }
+
   function renderBackupMgmt() {
     return `
 <div class="db-section db-section-backup" style="margin-bottom: 24px;">
