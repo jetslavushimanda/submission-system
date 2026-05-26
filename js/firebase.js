@@ -94,10 +94,13 @@ const FirestoreDB = (() => {
   // ── Submission count for a school ─────────────────────────────
   async function getSchoolCount(phone, schoolName) {
     try {
-      const snap = await db.collection(COL_SCHOOL_SUBS)
-        .where('schoolName', '==', schoolName)
-        .get();
-      const docs = snap.docs.map(d => d.data());
+      const [snap1, snap2] = await Promise.all([
+        db.collection(COL_SCHOOL_SUBS).where('schoolName', '==', schoolName).get(),
+        db.collection(COL_SCHOOL_SUBS).where('school',     '==', schoolName).get(),
+      ]);
+      const seen = new Set();
+      const docs = [];
+      [...snap1.docs, ...snap2.docs].forEach(d => { if (!seen.has(d.id)) { seen.add(d.id); docs.push(d.data()); } });
       return { status: 'ok', total: docs.length, ..._catCounts(docs) };
     } catch (e) { console.warn('getSchoolCount failed', e); }
     return { status: 'ok', total: 0, innovations: 0, academics: 0, skills: 0 };
@@ -137,11 +140,21 @@ const FirestoreDB = (() => {
   // ── Submission history for a school ───────────────────────────
   async function getSubmissionHistory(phone, source, zone, schoolName) {
     try {
-      const col  = source === 'zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
-      const field = source === 'zone' ? 'zone' : 'schoolName';
-      const val   = source === 'zone' ? zone : schoolName;
-      const snap = await db.collection(col).where(field, '==', val).get();
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const col = source === 'zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
+      let snaps;
+      if (source === 'zone') {
+        snaps = [await db.collection(col).where('zone', '==', zone).get()];
+      } else {
+        snaps = await Promise.all([
+          db.collection(col).where('schoolName', '==', schoolName).get(),
+          db.collection(col).where('school',     '==', schoolName).get(),
+        ]);
+      }
+      const seen = new Set();
+      const rows = [];
+      snaps.forEach(snap => snap.docs.forEach(d => {
+        if (!seen.has(d.id)) { seen.add(d.id); rows.push({ id: d.id, ...d.data() }); }
+      }));
       rows.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
       return { status: 'ok', rows };
     } catch (e) { console.warn('getSubmissionHistory failed', e); }
@@ -250,11 +263,11 @@ const FirestoreDB = (() => {
       const coordReg  = {};
       reg.forEach(r => {
         const role = (r.role || '').trim();
-        const name = (r.schoolName || '').trim();
+        const name = (r.schoolName || r.name || '').trim();
         if (role === 'School') {
-          schoolReg[name] = { zone: r.zone, type: r.schoolType || '', status: r.status };
+          schoolReg[name] = { zone: r.zone, type: r.schoolType || r.type || '', status: r.status };
         } else if (role === 'Zone') {
-          coordReg[r.zone] = { name: r.organiserName || '', phone: r.phone };
+          coordReg[r.zone] = { name: r.organiserName || r.organiser || '', phone: r.phone };
         }
       });
 
@@ -265,7 +278,7 @@ const FirestoreDB = (() => {
 
       s2.forEach(r => {
         const ts  = r.timestamp || '';
-        const sch = (r.schoolName || '').trim();
+        const sch = (r.schoolName || r.school || '').trim();
         if (ts && ts.slice(0, 10) === todayStr) todayCount++;
         if (sch) { schoolSubCounts[sch] = (schoolSubCounts[sch] || 0) + 1; schoolsStarted[sch] = true; }
       });
@@ -285,7 +298,7 @@ const FirestoreDB = (() => {
 
       s3.forEach(r => {
         const zn  = (r.zone || '').trim();
-        const sch = (r.participantSchool || r.schoolName || '').trim();
+        const sch = (r.participantSchool || r.schoolName || r.school || '').trim();
         if (zoneSubMap[zn]) {
           zoneSubMap[zn].cnt++;
           if (sch) zoneSubMap[zn].schools[sch] = (zoneSubMap[zn].schools[sch] || 0) + 1;
@@ -323,8 +336,8 @@ const FirestoreDB = (() => {
       }).sort((a, b) => a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : a.name < b.name ? -1 : 1);
 
       const allSubs = [
-        ...s2.map(r => ({ time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || r.id })),
-        ...s3.map(r => ({ time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || r.id })),
+        ...s2.map(r => ({ time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || r.id })),
+        ...s3.map(r => ({ time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || r.id })),
       ].sort((a, b) => b.time < a.time ? -1 : 1);
 
       const coverage = {};
@@ -349,10 +362,10 @@ const FirestoreDB = (() => {
       const allSchoolRecords = reg
         .filter(r => (r.role || '').trim() !== 'District')
         .map(r => ({
-          zone:      (r.zone         || '').trim(),
-          name:      (r.schoolName   || '').trim(),
-          type:      (r.schoolType   || '').trim(),
-          organiser: (r.organiserName || '').trim(),
+          zone:      (r.zone                        || '').trim(),
+          name:      (r.schoolName   || r.name      || '').trim(),
+          type:      (r.schoolType   || r.type      || '').trim(),
+          organiser: (r.organiserName || r.organiser || '').trim(),
           phone:     (r.phone        || '').trim(),
           role:      (r.role         || '').trim(),
           status:    (r.status       || 'Active').trim(),
@@ -393,8 +406,8 @@ const FirestoreDB = (() => {
         db.collection(COL_ZONE_SUBS).orderBy('timestamp', 'desc').limit(50).get(),
       ]);
       const feed = [
-        ...s2.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || d.id }; }),
-        ...s3.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || d.id }; }),
+        ...s2.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
+        ...s3.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
       ].sort((a, b) => b.time < a.time ? -1 : 1);
       return { status: 'ok', recentFeed: feed.slice(0, 20) };
     } catch (e) {

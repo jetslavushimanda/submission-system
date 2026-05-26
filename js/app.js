@@ -191,18 +191,16 @@ async function verifyPhone() {
       msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
 
     } else {
-      authData = { phone, ...data };
+      const schoolName   = data.schoolName   || data.name     || '';
+      const schoolType   = data.schoolType   || data.type     || '';
+      const organiserName = data.organiserName || data.organiser || '';
+      authData = { phone, role: data.role, zone: data.zone, schoolName, schoolType, organiserName, status: data.status };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
       sessionStorage.setItem('userPhone', phone);
       sessionStorage.setItem('userRole', data.role);
-      sessionStorage.setItem('schoolInfo', JSON.stringify({
-        zone: data.zone,
-        schoolName: data.schoolName,
-        schoolType: data.schoolType,
-        organiserName: data.organiserName
-      }));
+      sessionStorage.setItem('schoolInfo', JSON.stringify({ zone: data.zone, schoolName, schoolType, organiserName }));
       applyRoleUI(data.role);
-      msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
+      msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
     }
 
