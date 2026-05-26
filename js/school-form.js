@@ -693,7 +693,7 @@ const SchoolForm = (() => {
 
     let count = 0;
     existingSubmissions.forEach(s => {
-      const matchPType = s.pType === pType || (pType === 'Learner' && s.pType.indexOf('Learner') === 0);
+      const matchPType = s.participantType === pType || (pType === 'Learner' && (s.participantType || '').indexOf('Learner') === 0);
       const matchCat = s.category === cat;
 
       if (matchPType && matchCat) {
@@ -952,18 +952,9 @@ const SchoolForm = (() => {
     try {
       if (fileDataInMemory.base64) {
         btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
-        const fileRes = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action:   'uploadFile',
-            phone:    _auth.phone,
-            base64:   fileDataInMemory.base64,
-            fileName: fileDataInMemory.name,
-            mimeType: fileDataInMemory.type
-          }),
-        });
-        if (!fileRes.ok) throw new Error('Report upload failed: ' + fileRes.status);
-        const fileData = await fileRes.json();
+        const fileData = await FirestoreDB.uploadFile(
+          fileDataInMemory.base64, fileDataInMemory.name, fileDataInMemory.type, _auth.phone
+        );
         if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
         payload.fileUrl = fileData.url;
       }

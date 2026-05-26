@@ -13,6 +13,7 @@ const Dashboard = (() => {
   const FEED_REFRESH_S = 60 * 1000;       // 60 seconds
 
   let _activeDrawerId = null; // Currently open drawer identifier
+  let _pendingDelete  = null; // { ref, source } for delete confirmation
 
   const ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
 
@@ -222,7 +223,40 @@ const Dashboard = (() => {
   }
 
   function closeDeleteDrawer() {
+    _pendingDelete = null;
     closeActiveDrawer();
+  }
+
+  function promptDelete(ref, participant, school, category) {
+    _pendingDelete = { ref };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('del-ref',         ref);
+    set('del-participant', participant || '');
+    set('del-school',      school      || '');
+    set('del-category',    category    || '');
+    const ta = document.getElementById('del-reason');
+    if (ta) ta.value = '';
+    const drawer   = document.getElementById('drawer-delete-confirm');
+    const backdrop = document.getElementById('db-backdrop');
+    if (drawer)   drawer.classList.add('active');
+    if (backdrop) backdrop.classList.add('active');
+    _activeDrawerId = 'delete-confirm';
+  }
+
+  async function confirmDelete() {
+    if (!_pendingDelete) return;
+    const reason = (document.getElementById('del-reason') || {}).value || '';
+    if (!reason.trim()) { alert('Please enter a reason for deletion.'); return; }
+    const btn = document.getElementById('btn-confirm-delete');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    try {
+      await FirestoreDB.deleteSubmission(_pendingDelete.ref);
+      closeDeleteDrawer();
+      await loadFullData(true);
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'DELETE NOW'; }
+    }
   }
 
   function showGlobalLoader() {
@@ -422,6 +456,10 @@ const Dashboard = (() => {
         promptDelete(d.ref, d.participant, d.school, d.category);
       });
     });
+
+    // Bind the confirm-delete button
+    const confirmDelBtn = document.getElementById('btn-confirm-delete');
+    if (confirmDelBtn) confirmDelBtn.addEventListener('click', confirmDelete);
 
     // Re-active active drawer if it was set
     if (_activeDrawerId) {
@@ -635,9 +673,11 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
       const srcBadge = f.source === 'Zone'
         ? '<span class="db-feed-source-badge db-src-zone">ZONE</span>'
         : '<span class="db-feed-source-badge db-src-school">SCHOOL</span>';
-      return `
-    <div class="db-feed-ref">${esc(f.category)} &nbsp;&bull;&nbsp; ${esc(f.ref)}</div>
-  </div>
+      return `<div class="db-feed-item">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">${srcBadge}<span class="db-feed-school">${esc(f.participant || '')}</span></div>
+  <div class="db-feed-meta">${esc(f.school || '')}${f.zone ? ' &mdash; ' + esc(f.zone) : ''}</div>
+  <div class="db-feed-ref">${esc(f.category)} &nbsp;&bull;&nbsp; ${esc(f.ref)}</div>
+  <button class="btn-feed-delete" data-ref="${esc(f.ref)}" data-participant="${esc(f.participant || '')}" data-school="${esc(f.school || '')}" data-category="${esc(f.category || '')}" style="margin-top:5px;font-size:11px;padding:2px 8px;background:#fff;border:1px solid #e74c3c;color:#e74c3c;border-radius:4px;cursor:pointer;">&#128465; Delete</button>
 </div>`;
     }).join('');
   }
@@ -1570,6 +1610,8 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     openDrawer,
     closeActiveDrawer,
     closeDeleteDrawer,
+    promptDelete,
+    confirmDelete,
     _manualRefresh: () => loadFullData(true),
     _reloadOrg:     () => loadOrganisers(),
   };

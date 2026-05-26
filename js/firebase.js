@@ -25,8 +25,9 @@ if (!firebase.apps.length) {
   firebase.initializeApp(FIREBASE_CONFIG);
 }
 
-// Expose globally so all other scripts can use `db`
-const db = firebase.firestore();
+// Expose globally so all other scripts can use `db` and `storage`
+const db      = firebase.firestore();
+const storage = firebase.storage();
 
 // ── Collections ───────────────────────────────────────────────
 const COL_REGISTRATIONS   = 'registrations';
@@ -54,10 +55,7 @@ const FirestoreDB = (() => {
     return { status: 'ok' };
   }
 
-  // ── Registration lookup (replaces getInitData in Apps Script) ─
-  // NOTE: login PIN check still goes through Apps Script (auth.gs).
-  // This function is called AFTER a successful PIN auth to get
-  // school/zone info from Firestore instead of Sheets.
+  // ── Registration lookup — phone auth entry point ──────────────
   async function getRegistration(phone) {
     try {
       const snap = await db.collection(COL_REGISTRATIONS)
@@ -66,10 +64,24 @@ const FirestoreDB = (() => {
         .get();
       if (!snap.empty) {
         const d = snap.docs[0].data();
-        return { status: 'found', ...d };
+        return { found: true, ...d };
       }
     } catch (e) { console.warn('getRegistration failed', e); }
-    return { status: 'not_found' };
+    return { found: false };
+  }
+
+  // ── File upload to Firebase Storage ───────────────────────────
+  async function uploadFile(base64, fileName, mimeType, phone) {
+    try {
+      const path = 'submissions/' + (phone || 'anon') + '/' + Date.now() + '_' + fileName;
+      const ref  = storage.ref(path);
+      await ref.putString(base64, 'base64', { contentType: mimeType });
+      const url = await ref.getDownloadURL();
+      return { status: 'ok', url };
+    } catch (e) {
+      console.warn('uploadFile failed — storing base64 inline', e);
+      return { status: 'ok', url: 'data:' + mimeType + ';base64,' + base64 };
+    }
   }
 
   // ── Submission count for a school ─────────────────────────────
@@ -139,12 +151,34 @@ const FirestoreDB = (() => {
   async function getProgressData(phone, source, zone, schoolName) {
     const hist = await getSubmissionHistory(phone, source, zone, schoolName);
     const rows = hist.rows || [];
-    const byType = {};
+
+    const innovations            = { learner: {}, teacher: {}, youth: {} };
+    const academicsBySubjectLevel = {};
+    const skillsByCategory        = {};
+
     rows.forEach(r => {
-      const t = r.type || 'Unknown';
-      byType[t] = (byType[t] || 0) + 1;
+      const pType   = r.participantType || '';
+      const subType = r.learnerSubType  || '';
+      const cat     = r.category        || '';
+      const lvl     = r.level           || '';
+
+      if (pType === 'Teacher') {
+        innovations.teacher[cat] = (innovations.teacher[cat] || 0) + 1;
+      } else if (pType === 'Out-of-School Youth') {
+        innovations.youth[cat] = (innovations.youth[cat] || 0) + 1;
+      } else if (pType === 'Learner') {
+        if (subType === 'Technical Skills') {
+          skillsByCategory[cat] = (skillsByCategory[cat] || 0) + 1;
+        } else if (subType === 'Academics / Quiz & Olympiads') {
+          const key = lvl + ':' + cat;
+          academicsBySubjectLevel[key] = (academicsBySubjectLevel[key] || 0) + 1;
+        } else {
+          innovations.learner[cat] = (innovations.learner[cat] || 0) + 1;
+        }
+      }
     });
-    return { status: 'ok', byType, total: rows.length };
+
+    return { status: 'ok', innovations, academicsBySubjectLevel, skillsByCategory, total: rows.length };
   }
 
   // ── Add a school submission ───────────────────────────────────
@@ -389,6 +423,15 @@ const FirestoreDB = (() => {
     } catch (e) { console.error('adminToggleStatus failed', e); throw e; }
   }
 
+  // ── Admin: delete a submission by ref ────────────────────────
+  async function deleteSubmission(ref) {
+    const col = ref.startsWith('ZN-') ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
+    const snap = await db.collection(col).where('ref', '==', ref).limit(1).get();
+    if (snap.empty) throw new Error('Submission not found: ' + ref);
+    await snap.docs[0].ref.delete();
+    return { status: 'ok' };
+  }
+
   // ── Admin: delete a registration ──────────────────────────────
   async function adminDeleteOrganiser(targetPhone) {
     try {
@@ -441,6 +484,7 @@ const FirestoreDB = (() => {
     getDeadlines,
     saveDeadlines,
     getRegistration,
+    uploadFile,
     getSchoolCount,
     getZoneCount,
     getWelcomeStats,
@@ -451,6 +495,7 @@ const FirestoreDB = (() => {
     submitCorrectionRequest,
     getFullDashboard,
     getRecentFeed,
+    deleteSubmission,
     adminGetAllOrganisers,
     adminToggleStatus,
     adminDeleteOrganiser,

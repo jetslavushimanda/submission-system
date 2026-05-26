@@ -3,30 +3,7 @@
 // JETS 2024-2026 | Lavushimanda District
 // ═══════════════════════════════════════════════════════════════
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYd7lQYJ8ylREFy7dLZRkMfT3BjN-_FX6cTdPg4OG-aDK2U-dCl0E5-Q8wNNGxQ0lurw/exec";
-
 const SESSION_KEY = "jets_session";
-
-// FIX 4: Shared fetch helper with AbortController timeout.
-// Default 12 s — enough for Apps Script cold starts.
-async function postWithTimeout(body, ms) {
-  ms = ms || 10000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      body:   JSON.stringify(body),
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('Server error ' + res.status);
-    return await res.json();
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
-}
 
 // ── Submission Deadlines ──────────────────────────────────────
 // Initialized to default values; refreshed from Settings tab on boot.
@@ -177,8 +154,6 @@ function applyDeadlines(dl) {
 }
 
 // ── Phone Verification ────────────────────────────────────────
-// FIX 6: Uses getInitData — single round-trip returns auth + deadlines.
-// FIX 4: postWithTimeout aborts after 12 s instead of hanging forever.
 async function verifyPhone() {
   const input = document.getElementById('landing-phone');
   const msgEl = document.getElementById('landing-auth-msg');
@@ -195,9 +170,27 @@ async function verifyPhone() {
   msgEl.innerHTML = '';
 
   try {
-    const data = await postWithTimeout({ action: 'getInitData', phone }, 12000);
+    const data = await FirestoreDB.getRegistration(phone);
 
-    if (data.status === 'found') {
+    if (!data.found) {
+      authData = null;
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
+      lockAllButtons();
+      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
+
+    } else if (data.status !== 'Active') {
+      authData = null;
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('userPhone');
+      sessionStorage.removeItem('userRole');
+      sessionStorage.removeItem('schoolInfo');
+      lockAllButtons();
+      msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
+
+    } else {
       authData = { phone, ...data };
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(authData));
       sessionStorage.setItem('userPhone', phone);
@@ -208,40 +201,13 @@ async function verifyPhone() {
         schoolType: data.schoolType,
         organiserName: data.organiserName
       }));
-      // FIX 5: Cache deadlines so subsequent page loads skip the server call.
-      if (data.deadlines && Object.keys(data.deadlines).length) {
-        applyDeadlines(data.deadlines);
-        sessionStorage.setItem(SESSION_KEY + '_dl', JSON.stringify(data.deadlines));
-      }
       applyRoleUI(data.role);
       msgEl.innerHTML = `<p class="auth-msg-ok">&#10003; Verified: <strong>${data.organiserName}</strong> &mdash; ${roleLabel(data.role)}</p>`;
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.show(authData);
-
-    } else if (data.reason === 'inactive') {
-      authData = null;
-      sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('userPhone');
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('schoolInfo');
-      lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Registration pending. Contact the District JETS Organiser: 0973375828</p>';
-
-    } else {
-      authData = null;
-      sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('userPhone');
-      sessionStorage.removeItem('userRole');
-      sessionStorage.removeItem('schoolInfo');
-      lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
     }
 
   } catch (err) {
-    if (err.name === 'AbortError') {
-      msgEl.innerHTML = '<p class="auth-msg-error">Connection timeout. Check your internet and try again.</p>';
-    } else {
-      msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
-    }
+    msgEl.innerHTML = '<p class="auth-msg-error">Connection failed. Check your internet and try again.</p>';
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Verify';

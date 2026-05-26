@@ -143,7 +143,7 @@ ${buildCorrectionModalHTML()}`;
     let rows = _allRows.slice();
 
     if (_filterTab !== 'all') {
-      rows = rows.filter(r => tabLabel(r.pType).toLowerCase() === _filterTab);
+      rows = rows.filter(r => tabLabel(r.participantType).toLowerCase() === _filterTab);
     }
     if (_searchName) {
       const q = _searchName.toLowerCase();
@@ -151,7 +151,7 @@ ${buildCorrectionModalHTML()}`;
     }
     if (_searchRef) {
       const q = _searchRef.toLowerCase();
-      rows = rows.filter(r => (r.refNumber || '').toLowerCase().includes(q));
+      rows = rows.filter(r => (r.ref || '').toLowerCase().includes(q));
     }
 
     _filtered = rows;
@@ -180,7 +180,7 @@ ${buildCorrectionModalHTML()}`;
     }
 
     const items = _filtered.map((r, idx) => {
-      const tab      = tabLabel(r.pType);
+      const tab      = tabLabel(r.participantType);
       const tabClass = tab === 'Innovations' ? 'sh-badge-innov'
                      : tab === 'Academics'   ? 'sh-badge-acad'
                      : 'sh-badge-skills';
@@ -201,7 +201,7 @@ ${buildCorrectionModalHTML()}`;
           </div>
           <div class="sh-entry-meta">
             <span><span class="sh-meta-lbl">Date:</span> ${dt}</span>
-            <span><span class="sh-meta-lbl">Ref:</span> <span class="sh-ref">${r.refNumber ? esc(r.refNumber) : '&mdash;'}</span></span>
+            <span><span class="sh-meta-lbl">Ref:</span> <span class="sh-ref">${r.ref ? esc(r.ref) : '&mdash;'}</span></span>
           </div>
           <div class="sh-entry-bottom">
             <span class="sh-status sh-status-submitted">&#10003; ${esc(r.status || 'Submitted')}</span>
@@ -253,7 +253,7 @@ ${buildCorrectionModalHTML()}`;
     const msgEl   = document.getElementById('sh-corr-msg');
 
     if (!overlay) return;
-    if (refEl)  refEl.value  = row.refNumber  || '';
+    if (refEl)  refEl.value  = row.ref  || '';
     if (nameEl) nameEl.value = row.fullName   || '';
     if (whatEl) whatEl.value = '';
     if (infoEl) infoEl.value = '';
@@ -311,7 +311,7 @@ ${buildCorrectionModalHTML()}`;
       _correctionTarget.correctionStatus    = 'Pending';
       _correctionTarget.correctionRequestId = data.requestId || null;
       // Mirror update to _allRows too
-      const orig = _allRows.find(r => r.refNumber === _correctionTarget.refNumber);
+      const orig = _allRows.find(r => r.ref === _correctionTarget.ref);
       if (orig) { orig.correctionStatus = 'Pending'; orig.correctionRequestId = _correctionTarget.correctionRequestId; }
 
       showCorrMsg('Correction request submitted. The DEC will review it shortly.', 'success');
