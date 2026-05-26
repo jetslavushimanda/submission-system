@@ -66,8 +66,11 @@ const FirestoreDB = (() => {
         const d = snap.docs[0].data();
         return { found: true, ...d };
       }
-    } catch (e) { console.warn('getRegistration failed', e); }
-    return { found: false };
+      return { found: false };
+    } catch (e) {
+      console.warn('getRegistration failed', e);
+      return { found: false, dbError: e.message || String(e) };
+    }
   }
 
   // ── File upload to Firebase Storage ───────────────────────────

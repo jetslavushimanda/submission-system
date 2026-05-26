@@ -172,7 +172,10 @@ async function verifyPhone() {
   try {
     const data = await FirestoreDB.getRegistration(phone);
 
-    if (!data.found) {
+    if (data.dbError) {
+      msgEl.innerHTML = '<p class="auth-msg-error">Database error: ' + data.dbError + '</p>';
+
+    } else if (!data.found) {
       authData = null;
       sessionStorage.removeItem(SESSION_KEY);
       sessionStorage.removeItem('userPhone');
