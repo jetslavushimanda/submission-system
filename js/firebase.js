@@ -148,7 +148,8 @@ const FirestoreDB = (() => {
             const key = lvl + ':' + cat;
             academicsBySubjectLevel[key] = (academicsBySubjectLevel[key] || 0) + 1;
           } else {
-            innovations.learner[cat] = (innovations.learner[cat] || 0) + 1;
+            if (!innovations.learner[lvl]) innovations.learner[lvl] = {};
+            innovations.learner[lvl][cat] = (innovations.learner[lvl][cat] || 0) + 1;
           }
         }
       });
@@ -251,7 +252,8 @@ const FirestoreDB = (() => {
           const key = lvl + ':' + cat;
           academicsBySubjectLevel[key] = (academicsBySubjectLevel[key] || 0) + 1;
         } else {
-          innovations.learner[cat] = (innovations.learner[cat] || 0) + 1;
+          if (!innovations.learner[lvl]) innovations.learner[lvl] = {};
+          innovations.learner[lvl][cat] = (innovations.learner[lvl][cat] || 0) + 1;
         }
       }
     });

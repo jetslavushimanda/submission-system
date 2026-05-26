@@ -1188,9 +1188,8 @@ const SchoolForm = (() => {
     const acadBySL    = data.academicsBySubjectLevel || {};
     const skillsByCat = data.skillsByCategory || {};
 
-    const levels     = LEVELS_BY_SCHOOL_TYPE[_auth.schoolType] || [];
-    const learnerMax = levels.length || 1;
-    const hasSkills  = _auth.schoolType !== 'Primary School' && _auth.schoolType !== 'Community School';
+    const levels    = LEVELS_BY_SCHOOL_TYPE[_auth.schoolType] || [];
+    const hasSkills = _auth.schoolType !== 'Primary School' && _auth.schoolType !== 'Community School';
 
     function barRow(label, n, max) {
       const pct      = max > 0 ? Math.min(100, Math.round((n / max) * 100)) : 0;
@@ -1254,7 +1253,7 @@ const SchoolForm = (() => {
     }
 
     el.innerHTML =
-      innovSection('Learner Innovations', inn.learner || {}, learnerMax) +
+      levels.map(lvl => innovSection(lvl + ' Innovations', (inn.learner[lvl] || {}), 1)).join('') +
       innovSection('Teacher Innovations', inn.teacher || {}, 1) +
       innovSection('Out-of-School Youth Innovations', inn.youth || {}, 1) +
       acadHtml + skillsHtml +
