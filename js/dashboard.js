@@ -720,32 +720,100 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
   // ── Section 6: Skills Tracker ─────────────────────────────────
   function renderSkills(skills) {
-    const totalUsed  = skills.reduce((s, r) => s + r.used, 0);
-    const totalSlots = skills.reduce((s, r) => s + r.slots, 0);
+    const ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
+    const SKILL_CATS  = ['Civil Engineering', 'Mechanical Engineering', 'Electronics Services', 'Fashion Technology', 'Cosmetology'];
+    const SKILL_SLOTS = { 'Civil Engineering': 4, 'Mechanical Engineering': 4, 'Electronics Services': 2, 'Fashion Technology': 1, 'Cosmetology': 1 };
 
-    const rows = skills.map(sk => {
-      const pct       = sk.slots > 0 ? Math.min(100, Math.round((sk.used / sk.slots) * 100)) : 0;
-      const fillClass = pct >= 100 ? 'db-skill-fill-full' : pct >= 75 ? 'db-skill-fill-warning' : '';
+    // Calculate counts per zone dynamically
+    const zoneSkillsCounts = {};
+    ZONE_NAMES.forEach(z => {
+      zoneSkillsCounts[z] = {};
+      SKILL_CATS.forEach(c => { zoneSkillsCounts[z][c] = 0; });
+    });
+
+    (_allSubs || []).forEach(r => {
+      const subType = r.learnerSubType || '';
+      const zone    = r.zone || '';
+      const cat     = r.category || '';
+      if (subType === 'Technical Skills' && ZONE_NAMES.includes(zone) && SKILL_CATS.includes(cat)) {
+        zoneSkillsCounts[zone][cat]++;
+      }
+    });
+
+    // Render each zone's skills progress card
+    const zoneCards = ZONE_NAMES.map(z => {
+      const counts = zoneSkillsCounts[z];
+      const zoneTotal = SKILL_CATS.reduce((sum, c) => sum + counts[c], 0);
+      const zoneMax   = 12; // 4 + 4 + 2 + 1 + 1 = 12
+
+      const skillRows = SKILL_CATS.map(c => {
+        const used = counts[c];
+        const max  = SKILL_SLOTS[c];
+        const pct  = Math.min(100, Math.round((used / max) * 100));
+        const fillClass = pct >= 100 ? 'db-skill-fill-full' : pct >= 75 ? 'db-skill-fill-warning' : '';
+
+        return `
+          <div class="db-skill-row">
+            <span class="db-skill-label">${esc(c)}</span>
+            <div class="db-skill-track"><div class="db-skill-fill ${fillClass}" style="width:${pct}%"></div></div>
+            <span class="db-skill-count">${used}</span>
+            <span class="db-skill-slots">/ ${max}</span>
+          </div>`;
+      }).join('');
+
       return `
-<div class="db-skill-row">
-  <span class="db-skill-label">${esc(sk.category)}</span>
-  <div class="db-skill-track"><div class="db-skill-fill ${fillClass}" style="width:${pct}%"></div></div>
-  <span class="db-skill-count">${sk.used}</span>
-  <span class="db-skill-slots">/ ${sk.slots}</span>
-</div>`;
+        <div class="db-skill-zone-card" style="border: 1.5px solid #e8eef7; border-radius: 12px; padding: 14px; margin-bottom: 16px; background: #fff;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #f0f0f0; padding-bottom:6px;">
+            <span style="font-size:15px; font-weight:700; color:var(--db-navy);">${z} Zone</span>
+            <span style="font-size:14px; font-weight:700; color:var(--db-orange);">${zoneTotal} / ${zoneMax} slots</span>
+          </div>
+          <div class="db-skills-body" style="padding:0;">
+            ${skillRows}
+          </div>
+        </div>`;
+    }).join('');
+
+    // Calculate district-wide summary totals
+    const districtCounts = {};
+    SKILL_CATS.forEach(c => { districtCounts[c] = 0; });
+    ZONE_NAMES.forEach(z => {
+      SKILL_CATS.forEach(c => { districtCounts[c] += zoneSkillsCounts[z][c]; });
+    });
+
+    const distTotalUsed  = SKILL_CATS.reduce((sum, c) => sum + districtCounts[c], 0);
+    const distTotalSlots = 60; // 12 * 5 = 60
+
+    const districtRows = SKILL_CATS.map(c => {
+      const used = districtCounts[c];
+      const max  = SKILL_SLOTS[c] * 5; // 5 zones
+      const pct  = Math.min(100, Math.round((used / max) * 100));
+      const fillClass = pct >= 100 ? 'db-skill-fill-full' : pct >= 75 ? 'db-skill-fill-warning' : '';
+
+      return `
+        <div class="db-skill-row">
+          <span class="db-skill-label">${esc(c)}</span>
+          <div class="db-skill-track"><div class="db-skill-fill ${fillClass}" style="width:${pct}%"></div></div>
+          <span class="db-skill-count">${used}</span>
+          <span class="db-skill-slots">/ ${max}</span>
+        </div>`;
     }).join('');
 
     return `
-<div class="db-section">
-  <div class="db-section-title">Technical Skills &mdash; District-wide</div>
-  <div class="db-skills-body">
-    ${rows}
-    <div class="db-skill-total-row">
-      <span>TOTAL</span>
-      <span>${totalUsed} / ${totalSlots}</span>
-    </div>
-  </div>
-</div>`;
+      <div class="db-section" style="box-shadow:none; padding: 4px 0 0;">
+        <div class="db-section-title" style="border-left-color: var(--db-orange); border-bottom: none; margin-bottom: 8px;">Technical Skills Summary (District-wide)</div>
+        <div class="db-skills-body" style="margin-bottom: 24px;">
+          ${districtRows}
+          <div class="db-skill-total-row">
+            <span>DISTRICT TOTAL</span>
+            <span>${distTotalUsed} / ${distTotalSlots}</span>
+          </div>
+        </div>
+
+        <div class="db-section-title" style="border-left-color: var(--db-navy); border-bottom: none; margin-bottom: 12px;">Zonal Skills Breakdown</div>
+        <div class="db-skills-zones-container" style="padding: 0 14px;">
+          ${zoneCards}
+        </div>
+      </div>`;
   }
 
   // ── Section 7: Quick Actions ──────────────────────────────────
