@@ -12,6 +12,111 @@ const Dashboard = (() => {
   const CACHE_MS       = 5 * 60 * 1000;  // 5 minutes
   const FEED_REFRESH_S = 60 * 1000;       // 60 seconds
 
+  // ── Modular Firebase SDK Compat Helpers ───────────────────────
+  function collection(db, path) {
+    const actualPath = (path === 'submissions') ? 'school_submissions'
+                     : (path === 'zone_submissions') ? 'zone_submissions'
+                     : path;
+    return db.collection(actualPath);
+  }
+  async function getDocs(q) {
+    return await q.get();
+  }
+
+  function showSpinner(msg) {
+    const loader = document.getElementById('db-global-loader');
+    const text = loader ? loader.querySelector('.db-loader-text') : null;
+    if (text) text.textContent = msg || 'Preparing export...';
+    if (loader) loader.classList.remove('hidden');
+  }
+  function hideSpinner() {
+    const loader = document.getElementById('db-global-loader');
+    if (loader) loader.classList.add('hidden');
+  }
+  function showError(msg) {
+    alert(msg);
+  }
+
+  async function exportAllToExcel() {
+    try {
+      showSpinner('Preparing export...');
+
+      const [schoolSnap, zoneSnap] = await Promise.all([
+        getDocs(collection(db, 'submissions')),
+        getDocs(collection(db, 'zone_submissions'))
+      ]);
+
+      const schoolData = schoolSnap.docs.map(d => d.data());
+      const zoneData = zoneSnap.docs.map(d => d.data());
+
+      // Create workbook with two sheets
+      const wb = XLSX.utils.book_new();
+
+      const schoolSheet = XLSX.utils.json_to_sheet(schoolData);
+      XLSX.utils.book_append_sheet(wb, schoolSheet, 'School Submissions');
+
+      const zoneSheet = XLSX.utils.json_to_sheet(zoneData);
+      XLSX.utils.book_append_sheet(wb, zoneSheet, 'Zone Submissions');
+
+      XLSX.writeFile(wb, 'JETS_Lavushimanda_2026_All_Submissions.xlsx');
+      hideSpinner();
+
+    } catch (error) {
+      console.error(error);
+      hideSpinner();
+      showError('Export failed. Try again.');
+    }
+  }
+
+  async function exportSchoolSubmissions() {
+    try {
+      showSpinner('Preparing export...');
+
+      const snapshot = await getDocs(
+        collection(db, 'submissions'));
+      const data = snapshot.docs.map(d => d.data());
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, 'School Submissions');
+      XLSX.writeFile(wb, 'JETS_School_Submissions_2026.xlsx');
+
+      hideSpinner();
+    } catch (error) {
+      console.error(error);
+      hideSpinner();
+      showError('Export failed. Try again.');
+    }
+  }
+
+  async function exportZoneSubmissions() {
+    try {
+      showSpinner('Preparing export...');
+
+      const snapshot = await getDocs(
+        collection(db, 'zone_submissions'));
+      const data = snapshot.docs.map(d => d.data());
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Zone Submissions');
+      XLSX.writeFile(wb, 'JETS_Zone_Submissions_2026.xlsx');
+
+      hideSpinner();
+    } catch (error) {
+      console.error(error);
+      hideSpinner();
+      showError('Export failed. Try again.');
+    }
+  }
+
+  function viewDriveFiles() {
+    window.open(
+      'https://drive.google.com',
+      '_blank'
+    );
+  }
+
   let _activeDrawerId = null; // Currently open drawer identifier
   let _pendingDelete  = null; // { ref, source } for delete confirmation
 
@@ -818,27 +923,22 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
   // ── Section 7: Quick Actions ──────────────────────────────────
   function renderActions(data) {
-    const exp   = data.exportUrl       || '#';
-    const expS  = data.exportSchoolUrl || exp;
-    const expZ  = data.exportZoneUrl   || exp;
-    const drive = data.driveUrl        || '#';
-
     return `
 <div class="db-section">
   <div class="db-section-title">Quick Actions</div>
   <div class="db-actions-body">
-    <a href="${exp}" target="_blank" rel="noopener" class="db-action-btn db-action-primary">
+    <button onclick="Dashboard.exportAllToExcel()" class="db-action-btn db-action-primary">
       Export All to Excel
-    </a>
-    <a href="${expS}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
+    </button>
+    <button onclick="Dashboard.exportSchoolSubmissions()" class="db-action-btn db-action-secondary">
       Export School Submissions
-    </a>
-    <a href="${expZ}" target="_blank" rel="noopener" class="db-action-btn db-action-secondary">
+    </button>
+    <button onclick="Dashboard.exportZoneSubmissions()" class="db-action-btn db-action-secondary">
       Export Zone Submissions
-    </a>
-    <a href="${drive}" target="_blank" rel="noopener" class="db-action-btn db-action-outline">
+    </button>
+    <button onclick="Dashboard.viewDriveFiles()" class="db-action-btn db-action-outline">
       View Drive Files
-    </a>
+    </button>
   </div>
 </div>`;
   }
@@ -1682,6 +1782,10 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     confirmDelete,
     _manualRefresh: () => loadFullData(true),
     _reloadOrg:     () => loadOrganisers(),
+    exportAllToExcel,
+    exportSchoolSubmissions,
+    exportZoneSubmissions,
+    viewDriveFiles
   };
 
 })();
