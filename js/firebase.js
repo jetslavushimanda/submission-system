@@ -228,6 +228,28 @@ const FirestoreDB = (() => {
         if (!seen.has(d.id)) { seen.add(d.id); rows.push({ id: d.id, ...d.data() }); }
       }));
       rows.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
+
+      // Join correction requests to populate correctionStatus persistently across sessions
+      try {
+        const corrSnap = await db.collection(COL_CORRECTIONS).get();
+        const corrMap = {};
+        corrSnap.forEach(d => {
+          const c = d.data();
+          if (c.refNumber) {
+            corrMap[c.refNumber] = { status: c.status, id: d.id };
+          }
+        });
+        rows.forEach(r => {
+          const corr = corrMap[r.ref || r.id];
+          if (corr) {
+            r.correctionStatus = corr.status;
+            r.correctionRequestId = corr.id;
+          }
+        });
+      } catch (ce) {
+        console.warn('Joining correction requests failed', ce);
+      }
+
       return { status: 'ok', rows };
     } catch (e) { console.warn('getSubmissionHistory failed', e); }
     return { status: 'ok', rows: [] };

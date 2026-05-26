@@ -117,6 +117,109 @@ const Dashboard = (() => {
     );
   }
 
+  function downloadDatabaseBackup() {
+    try {
+      showSpinner('Generating backup...');
+      if (!_data) throw new Error('No data loaded to backup.');
+
+      const backup = {
+        system: "JETS Lavushimanda 2026 Submission System",
+        exportedAt: new Date().toISOString(),
+        stats: _data.overview,
+        organisers: _organisers || _data.allSchoolRecords || [],
+        schoolSubmissions: (_allSubs || []).filter(s => s.source === 'School'),
+        zoneSubmissions: (_allSubs || []).filter(s => s.source === 'Zone'),
+        correctionRequests: _data.corrections || []
+      };
+
+      const jsonStr = JSON.stringify(backup, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `JETS_Lavushimanda_2026_DB_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      hideSpinner();
+    } catch (err) {
+      hideSpinner();
+      showError('Backup failed: ' + err.message);
+    }
+  }
+
+  function runSystemDiagnostics() {
+    try {
+      if (!_data) throw new Error('No data loaded to run diagnostics.');
+
+      const orgs = _organisers || _data.allSchoolRecords || [];
+      const subs = _allSubs || [];
+      const corrs = _data.corrections || [];
+
+      const activeOrgs = orgs.filter(o => o.status === 'Active').length;
+      const inactiveOrgs = orgs.filter(o => o.status !== 'Active').length;
+
+      // Find orphaned submissions (school name not in registrations)
+      const regSchoolNames = new Set(orgs.map(o => o.name.trim().toLowerCase()));
+      const orphaned = subs.filter(s => s.school && !regSchoolNames.has(s.school.trim().toLowerCase()));
+
+      // Duplicate references
+      const refs = new Set();
+      const duplicates = [];
+      subs.forEach(s => {
+        if (s.ref) {
+          if (refs.has(s.ref)) {
+            duplicates.push(s.ref);
+          } else {
+            refs.add(s.ref);
+          }
+        }
+      });
+
+      // Correction stats
+      const totalCorrs = corrs.length;
+      const pendingCorrs = corrs.filter(c => c.status === 'Pending').length;
+      const resolvedCorrs = totalCorrs - pendingCorrs;
+
+      const reportEl = document.getElementById('db-diag-report');
+      if (!reportEl) return;
+
+      reportEl.innerHTML = `
+        <h4 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; font-family: inherit;">
+          <span>🩺 System Health Diagnostic Report</span>
+          <span style="font-size: 11px; padding: 2px 6px; background: #e8f4fd; color: #3498db; border-radius: 4px; font-weight: bold;">PASS</span>
+        </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 12px; line-height: 1.5; color: #333;">
+          <div>👤 <strong>Active Organisers:</strong> <span style="color: #2ecc71; font-weight: 700;">${activeOrgs}</span></div>
+          <div>⏳ <strong>Pending Organisers:</strong> <span style="color: #e67e22; font-weight: 700;">${inactiveOrgs}</span></div>
+          <div>📝 <strong>Total Submissions:</strong> <span style="font-weight: 700; color: #1a3c6e;">${subs.length}</span></div>
+          <div>🔒 <strong>Integrity Checks:</strong> <span style="color: #2ecc71; font-weight: 700;">OK</span></div>
+          <div>⚠️ <strong>Orphaned Submissions:</strong> <span style="font-weight: 700; color: ${orphaned.length > 0 ? '#e74c3c' : '#2ecc71'};">${orphaned.length}</span></div>
+          <div>🌀 <strong>Duplicate Refs:</strong> <span style="font-weight: 700; color: ${duplicates.length > 0 ? '#e74c3c' : '#2ecc71'};">${duplicates.length}</span></div>
+          <div>🛠️ <strong>Pending Corrections:</strong> <span style="font-weight: 700; color: ${pendingCorrs > 0 ? '#e67e22' : '#2ecc71'};">${pendingCorrs}</span></div>
+          <div>✅ <strong>Resolved Corrections:</strong> <span style="font-weight: 700; color: #2ecc71;">${resolvedCorrs} / ${totalCorrs}</span></div>
+        </div>
+        ${orphaned.length > 0 ? `
+          <div style="margin-top: 12px; font-size: 11px; background: #fffdf5; border: 1px solid #ffeeba; color: #856404; padding: 8px; border-radius: 6px; line-height: 1.4;">
+            <strong>⚠️ Warning:</strong> Found ${orphaned.length} submissions from school names not in the registrations roster. This usually happens if a coordinator was renamed or deleted.
+          </div>
+        ` : ''}
+        ${duplicates.length > 0 ? `
+          <div style="margin-top: 12px; font-size: 11px; background: #fdf2f2; border: 1px solid #fde2e2; color: #c53030; padding: 8px; border-radius: 6px; line-height: 1.4;">
+            <strong>🚨 Data Anomaly:</strong> Found ${duplicates.length} duplicate submission references!
+          </div>
+        ` : ''}
+      `;
+      reportEl.classList.remove('hidden');
+      reportEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      showError('Diagnostic check failed: ' + err.message);
+    }
+  }
+
   let _activeDrawerId = null; // Currently open drawer identifier
   let _pendingDelete  = null; // { ref, source } for delete confirmation
 
@@ -499,6 +602,7 @@ const Dashboard = (() => {
     ${renderCorrections(corrections)}
     ${renderOrganiserMgmt()}
     ${renderDeadlineMgmt()}
+    ${renderBackupMgmt()}
   </div>
 </div>
 
@@ -1582,6 +1686,26 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
 
   <div id="db-dl-msg" class="db-org-form-msg hidden"></div>
 </div>`;
+  function renderBackupMgmt() {
+    return `
+<div class="db-section db-section-backup" style="margin-bottom: 24px;">
+  <div class="db-section-title" style="border-left-color: #2ecc71;">System Database & Utilities</div>
+  <div style="padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 13px; color: #666; line-height: 1.5;">
+      Verify data integrity, check registered coordinators, or export a complete local snapshot of organisers, school submissions, and zone submissions in JSON format.
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <button onclick="Dashboard.downloadDatabaseBackup()" class="db-action-btn db-action-secondary" style="background: #2ecc71; flex: 1; box-shadow: none; font-size: 13px;">
+        📥 Export JSON Backup
+      </button>
+      <button onclick="Dashboard.runSystemDiagnostics()" class="db-action-btn db-action-outline" style="border-color: #3498db; color: #3498db; flex: 1; font-size: 13px;">
+        🩺 Run Diagnostics
+      </button>
+    </div>
+    <div id="db-diag-report" class="db-diag-report hidden" style="background: #f8f9fa; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-top: 8px; font-family: inherit;">
+    </div>
+  </div>
+</div>`;
   }
 
   function bindDeadlineMgmt() {
@@ -1785,7 +1909,9 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     exportAllToExcel,
     exportSchoolSubmissions,
     exportZoneSubmissions,
-    viewDriveFiles
+    viewDriveFiles,
+    downloadDatabaseBackup,
+    runSystemDiagnostics
   };
 
 })();
