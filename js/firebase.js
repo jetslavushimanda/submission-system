@@ -44,6 +44,8 @@ const COL_CORRECTIONS     = 'correction_requests';
 // ═══════════════════════════════════════════════════════════════
 const FirestoreDB = (() => {
 
+  let _zoneHistoryCache = null;
+
   // ── Deadlines ─────────────────────────────────────────────────
   async function getDeadlines() {
     try {
@@ -127,6 +129,8 @@ const FirestoreDB = (() => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       docs.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
 
+      _zoneHistoryCache = docs;
+
       const schoolSet = new Set(docs.map(d => d.participantSchool || d.schoolName || d.school).filter(Boolean));
 
       const innovations            = { learner: {}, teacher: {}, youth: {} };
@@ -204,6 +208,9 @@ const FirestoreDB = (() => {
 
   // ── Submission history for a school ───────────────────────────
   async function getSubmissionHistory(phone, source, zone, schoolName) {
+    if (source === 'zone' && _zoneHistoryCache !== null) {
+      return { status: 'ok', rows: _zoneHistoryCache };
+    }
     try {
       const col = source === 'zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
       let snaps;
@@ -290,6 +297,13 @@ const FirestoreDB = (() => {
       payload.ref = refNumber;
 
       await db.collection(COL_ZONE_SUBS).doc(refNumber).set(payload);
+
+      // Update local history cache
+      const localSub = { id: refNumber, ref: refNumber, ...payload };
+      if (_zoneHistoryCache) {
+        _zoneHistoryCache.unshift(localSub);
+      }
+
       return { status: 'ok', refNumber: refNumber };
     } catch (e) {
       console.error('submitZone failed', e);

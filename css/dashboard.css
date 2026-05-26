@@ -1282,3 +1282,17 @@
   .db-dl-btns .db-dl-btn { min-width: 100%; }
   .db-org-actions-cell { min-width: auto; }
 }
+
+/* Dashboard Grid Button SVGs */
+.db-btn-icon svg {
+  width: 32px;
+  height: 32px;
+  stroke: var(--db-navy);
+  display: block;
+  margin: 0 auto;
+  transition: stroke 0.15s ease;
+}
+
+.db-grid-btn:hover .db-btn-icon svg {
+  stroke: var(--db-orange);
+}

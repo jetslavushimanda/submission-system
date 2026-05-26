@@ -9,6 +9,55 @@ const ZoneForm = (() => {
   let fileDataInMemory = { base64: null, name: null, type: null };
   let _bypassDuplicateOnce = false;
 
+  let cachedSlotCount = 0;
+
+  // ── Modular Firebase SDK Compat Helpers ───────────────────────
+  function collection(db, path) {
+    const actualPath = (path === 'submissions') ? 'zone_submissions' : path;
+    return db.collection(actualPath);
+  }
+  function where(field, op, value) {
+    return { field, op, value };
+  }
+  function query(colRef, ...constraints) {
+    let q = colRef;
+    for (const c of constraints) {
+      q = q.where(c.field, c.op, c.value);
+    }
+    return q;
+  }
+  async function getDocs(q) {
+    return await q.get();
+  }
+
+  function recalculateProgressDataLocally() {
+    const innovations            = { learner: {}, teacher: {}, youth: {} };
+    const academicsBySubjectLevel = {};
+    const skillsByCategory        = {};
+    existingSubmissions.forEach(r => {
+      const pType   = r.participantType || '';
+      const subType = r.learnerSubType  || '';
+      const cat     = r.category        || '';
+      const lvl     = r.level           || '';
+      if (pType === 'Teacher') {
+        innovations.teacher[cat] = (innovations.teacher[cat] || 0) + 1;
+      } else if (pType === 'Out-of-School Youth') {
+        innovations.youth[cat] = (innovations.youth[cat] || 0) + 1;
+      } else if (pType === 'Learner') {
+        if (subType === 'Technical Skills') {
+          skillsByCategory[cat] = (skillsByCategory[cat] || 0) + 1;
+        } else if (subType === 'Academics / Quiz & Olympiads') {
+          const key = lvl + ':' + cat;
+          academicsBySubjectLevel[key] = (academicsBySubjectLevel[key] || 0) + 1;
+        } else {
+          if (!innovations.learner[lvl]) innovations.learner[lvl] = {};
+          innovations.learner[lvl][cat] = (innovations.learner[lvl][cat] || 0) + 1;
+        }
+      }
+    });
+    return { status: 'ok', innovations, academicsBySubjectLevel, skillsByCategory, total: existingSubmissions.length };
+  }
+
   const ZONE_SLOT_TOTAL = 64;
   const DRAFT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -85,8 +134,16 @@ const ZoneForm = (() => {
   // ── Full Page HTML ────────────────────────────────────────────
   function buildHTML() {
     return `
+<!-- Initial loading spinner -->
+<div id="zf-initial-loading" class="auth-status-wrap">
+  <div class="auth-status-card">
+    <div class="spinner-dark"></div>
+    <div class="auth-checking-text">Loading Zone Submissions...</div>
+  </div>
+</div>
+
 <!-- Main Dashboard Grid View -->
-<div class="sf-main-view">
+<div class="sf-main-view hidden" id="zf-main-content">
   <div class="form-topbar">
     <button class="btn-back" onclick="App.backToLanding()">&#8592; Back</button>
     <span class="topbar-title">Zone Submission Portal</span>
@@ -613,8 +670,6 @@ const ZoneForm = (() => {
       overlay.classList.remove('active');
       document.body.style.overflow = '';
     }
-
-    loadAllZoneData();
   }
 
   function openDrawer(name) {
@@ -623,7 +678,6 @@ const ZoneForm = (() => {
     if (drawer) drawer.classList.add('active');
     if (overlay) overlay.classList.add('active');
     document.body.style.overflow = 'hidden';
-    loadAllZoneData();
   }
 
   function closeDrawer(name) {
@@ -1068,8 +1122,45 @@ const ZoneForm = (() => {
 
       _submitting = false;
       clearDraft();
-      loadAllZoneData();
-      if (typeof WelcomeStats !== 'undefined') WelcomeStats.refresh();
+
+      // Local state update instead of calling loadAllZoneData() (which performs network read)
+      cachedSlotCount++;
+      updateSlot(cachedSlotCount);
+
+      const localNewSub = {
+        id: data.refNumber,
+        ref: data.refNumber,
+        ...payload,
+        timestamp: payload.timestamp || new Date().toISOString()
+      };
+      existingSubmissions.unshift(localNewSub);
+
+      // Recalculate progress data locally and render progress bars
+      const progressData = recalculateProgressDataLocally();
+      renderProgressBars(progressData);
+
+      // Update WelcomeStats cache in sessionStorage completely locally
+      try {
+        const wsKey = 'jets_ws_' + _auth.phone;
+        const wsCached = sessionStorage.getItem(wsKey);
+        if (wsCached) {
+          const wsData = JSON.parse(wsCached);
+          wsData.total = (wsData.total || 0) + 1;
+          const pType   = payload.participantType || '';
+          const subType = payload.learnerSubType  || '';
+          if (pType === 'Teacher' || pType === 'Out-of-School Youth' || (pType === 'Learner' && !subType)) {
+            wsData.innovations = (wsData.innovations || 0) + 1;
+          } else if (subType === 'Academics / Quiz & Olympiads') {
+            wsData.academics = (wsData.academics || 0) + 1;
+          } else if (subType === 'Technical Skills') {
+            wsData.skills = (wsData.skills || 0) + 1;
+          }
+          if (payload.participantSchool && !wsData.submittedSchools.includes(payload.participantSchool)) {
+            wsData.submittedSchools.push(payload.participantSchool);
+          }
+          sessionStorage.setItem(wsKey, JSON.stringify(wsData));
+        }
+      } catch (_) {}
       
       const sheet = document.getElementById('sheet-' + prefix);
       if (sheet) sheet.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1204,12 +1295,42 @@ const ZoneForm = (() => {
     };
   }
 
-  // ── Single combined load: slots + progress + existing subs ────
   async function loadAllZoneData() {
+    const spinner = document.getElementById('zf-initial-loading');
+    const content = document.getElementById('zf-main-content');
+
     try {
+      let slotsUsed = 0;
+      try {
+        const zoneName = _auth.zone;
+        const q = query(
+          collection(db, 'submissions'),
+          where('zone', '==', zoneName)
+        );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Query timeout')), 5000)
+        );
+        const snapshot = await Promise.race([getDocs(q), timeoutPromise]);
+        slotsUsed = snapshot.size;
+      } catch (err) {
+        console.warn('Slot count query failed or timed out', err);
+        slotsUsed = 0;
+      }
+
+      cachedSlotCount = slotsUsed;
+      updateSlot(slotsUsed);
+
       const data = await FirestoreDB.getZoneAllData(_auth.phone, _auth.zone);
       existingSubmissions = data.rows || [];
-      if (typeof data.total === 'number') updateSlot(data.total);
+
+      // Fallback: If modular query failed or returned 0, but getZoneAllData returned valid docs,
+      // let's use data.total (which is docs.length) to populate slots count
+      if (slotsUsed === 0 && data.total > 0) {
+        slotsUsed = data.total;
+        cachedSlotCount = slotsUsed;
+        updateSlot(slotsUsed);
+      }
+
       if (data.progressData && data.progressData.status === 'ok') {
         renderProgressBars(data.progressData);
         const loading = document.getElementById('sf-progress-loading');
@@ -1217,11 +1338,15 @@ const ZoneForm = (() => {
         if (loading) loading.classList.add('hidden');
         if (body)    body.classList.remove('hidden');
       }
-    } catch (_) {
-      const el = document.getElementById('sf-slot-display');
-      if (el) el.innerHTML = '&#8212; of ' + ZONE_SLOT_TOTAL;
-      const loading = document.getElementById('sf-progress-loading');
-      if (loading) loading.textContent = 'Could not load progress.';
+    } catch (err) {
+      console.error('Initial data load failed', err);
+      cachedSlotCount = 0;
+      updateSlot(0);
+      const progressLoading = document.getElementById('sf-progress-loading');
+      if (progressLoading) progressLoading.textContent = 'Could not load progress.';
+    } finally {
+      if (spinner) spinner.classList.add('hidden');
+      if (content) content.classList.remove('hidden');
     }
   }
 

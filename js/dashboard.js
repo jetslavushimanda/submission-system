@@ -282,35 +282,35 @@ const Dashboard = (() => {
 <!-- Button Grid -->
 <div class="db-button-grid">
   <button class="db-grid-btn btn-overview" onclick="Dashboard.openDrawer('overview')">
-    <span class="db-btn-icon">📊</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
     <span class="db-btn-text">Overview</span>
   </button>
   <button class="db-grid-btn btn-zone" onclick="Dashboard.openDrawer('zone')">
-    <span class="db-btn-icon">📍</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
     <span class="db-btn-text">Zone Progress</span>
   </button>
   <button class="db-grid-btn btn-school" onclick="Dashboard.openDrawer('school')">
-    <span class="db-btn-icon">🏫</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg></span>
     <span class="db-btn-text">School Status</span>
   </button>
   <button class="db-grid-btn btn-feed" onclick="Dashboard.openDrawer('feed')">
-    <span class="db-btn-icon">🔔</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
     <span class="db-btn-text">Recent Feed</span>
   </button>
   <button class="db-grid-btn btn-coverage" onclick="Dashboard.openDrawer('coverage')">
-    <span class="db-btn-icon">📈</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
     <span class="db-btn-text">Category Coverage</span>
   </button>
   <button class="db-grid-btn btn-skills" onclick="Dashboard.openDrawer('skills')">
-    <span class="db-btn-icon">🛠️</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
     <span class="db-btn-text">Skills Tracker</span>
   </button>
   <button class="db-grid-btn btn-admin" onclick="Dashboard.openDrawer('admin')">
-    <span class="db-btn-icon">🛡️</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
     <span class="db-btn-text">Admin Panel</span>
   </button>
   <button class="db-grid-btn btn-settings" onclick="Dashboard.openDrawer('settings')">
-    <span class="db-btn-icon">⚙️</span>
+    <span class="db-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     <span class="db-btn-text">Actions & Settings</span>
   </button>
 </div>
