@@ -84,17 +84,21 @@ const FirestoreDB = (() => {
     }
   }
 
+  function _catCounts(docs) {
+    const innovations = docs.filter(d => (d.learnerSubType || '') !== 'Academics / Quiz & Olympiads' && (d.learnerSubType || '') !== 'Technical Skills').length;
+    const academics   = docs.filter(d => (d.learnerSubType || '') === 'Academics / Quiz & Olympiads').length;
+    const skills      = docs.filter(d => (d.learnerSubType || '') === 'Technical Skills').length;
+    return { innovations, academics, skills };
+  }
+
   // ── Submission count for a school ─────────────────────────────
   async function getSchoolCount(phone, schoolName) {
     try {
       const snap = await db.collection(COL_SCHOOL_SUBS)
-        .where('school', '==', schoolName)
+        .where('schoolName', '==', schoolName)
         .get();
       const docs = snap.docs.map(d => d.data());
-      const innovations = docs.filter(d => d.type && d.type.toLowerCase().includes('innov')).length;
-      const academics   = docs.filter(d => d.type && d.type.toLowerCase().includes('academ')).length;
-      const skills      = docs.filter(d => d.type && d.type.toLowerCase().includes('skill')).length;
-      return { status: 'ok', total: docs.length, innovations, academics, skills };
+      return { status: 'ok', total: docs.length, ..._catCounts(docs) };
     } catch (e) { console.warn('getSchoolCount failed', e); }
     return { status: 'ok', total: 0, innovations: 0, academics: 0, skills: 0 };
   }
@@ -106,14 +110,11 @@ const FirestoreDB = (() => {
         .where('zone', '==', zone)
         .get();
       const docs = snap.docs.map(d => d.data());
-      const schoolSet   = new Set(docs.map(d => d.school).filter(Boolean));
-      const innovations = docs.filter(d => d.type && d.type.toLowerCase().includes('innov')).length;
-      const academics   = docs.filter(d => d.type && d.type.toLowerCase().includes('academ')).length;
-      const skills      = docs.filter(d => d.type && d.type.toLowerCase().includes('skill')).length;
+      const schoolSet = new Set(docs.map(d => d.participantSchool || d.schoolName || d.school).filter(Boolean));
       return {
         status: 'ok',
         total: docs.length,
-        innovations, academics, skills,
+        ..._catCounts(docs),
         submittedSchools: [...schoolSet]
       };
     } catch (e) { console.warn('getZoneCount failed', e); }
@@ -137,7 +138,7 @@ const FirestoreDB = (() => {
   async function getSubmissionHistory(phone, source, zone, schoolName) {
     try {
       const col  = source === 'zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
-      const field = source === 'zone' ? 'zone' : 'school';
+      const field = source === 'zone' ? 'zone' : 'schoolName';
       const val   = source === 'zone' ? zone : schoolName;
       const snap = await db.collection(col).where(field, '==', val).get();
       const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -249,11 +250,11 @@ const FirestoreDB = (() => {
       const coordReg  = {};
       reg.forEach(r => {
         const role = (r.role || '').trim();
-        const name = (r.name || r.schoolName || r.organiser || '').trim();
+        const name = (r.schoolName || '').trim();
         if (role === 'School') {
-          schoolReg[name] = { zone: r.zone, type: r.type || r.schoolType, status: r.status };
+          schoolReg[name] = { zone: r.zone, type: r.schoolType || '', status: r.status };
         } else if (role === 'Zone') {
-          coordReg[r.zone] = { name: r.organiser || r.name, phone: r.phone };
+          coordReg[r.zone] = { name: r.organiserName || '', phone: r.phone };
         }
       });
 
@@ -264,7 +265,7 @@ const FirestoreDB = (() => {
 
       s2.forEach(r => {
         const ts  = r.timestamp || '';
-        const sch = (r.school || '').trim();
+        const sch = (r.schoolName || '').trim();
         if (ts && ts.slice(0, 10) === todayStr) todayCount++;
         if (sch) { schoolSubCounts[sch] = (schoolSubCounts[sch] || 0) + 1; schoolsStarted[sch] = true; }
       });
@@ -284,7 +285,7 @@ const FirestoreDB = (() => {
 
       s3.forEach(r => {
         const zn  = (r.zone || '').trim();
-        const sch = (r.school || '').trim();
+        const sch = (r.participantSchool || r.schoolName || '').trim();
         if (zoneSubMap[zn]) {
           zoneSubMap[zn].cnt++;
           if (sch) zoneSubMap[zn].schools[sch] = (zoneSubMap[zn].schools[sch] || 0) + 1;
@@ -322,8 +323,8 @@ const FirestoreDB = (() => {
       }).sort((a, b) => a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : a.name < b.name ? -1 : 1);
 
       const allSubs = [
-        ...s2.map(r => ({ time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.school || '', participant: r.participant || r.participantName || '', type: r.type || '', category: r.category || '', ref: r.ref || r.submissionRef || r.id })),
-        ...s3.map(r => ({ time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.school || '', participant: r.participant || r.participantName || '', type: r.type || '', category: r.category || '', ref: r.ref || r.submissionRef || r.id })),
+        ...s2.map(r => ({ time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || r.id })),
+        ...s3.map(r => ({ time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || r.id })),
       ].sort((a, b) => b.time < a.time ? -1 : 1);
 
       const coverage = {};
@@ -339,7 +340,7 @@ const FirestoreDB = (() => {
       const skillCounts = {};
       SKILL_CATS.forEach(c => { skillCounts[c] = 0; });
       allSubs.forEach(r => {
-        if (r.type && r.type.indexOf('Technical Skills') !== -1 && r.category && skillCounts[r.category] !== undefined) {
+        if (r.learnerSubType === 'Technical Skills' && r.category && skillCounts[r.category] !== undefined) {
           skillCounts[r.category]++;
         }
       });
@@ -348,13 +349,13 @@ const FirestoreDB = (() => {
       const allSchoolRecords = reg
         .filter(r => (r.role || '').trim() !== 'District')
         .map(r => ({
-          zone:      (r.zone      || '').trim(),
-          name:      (r.name || r.schoolName || '').trim(),
-          type:      (r.type || r.schoolType || '').trim(),
-          organiser: (r.organiser || r.organiserName || '').trim(),
-          phone:     (r.phone     || '').trim(),
-          role:      (r.role      || '').trim(),
-          status:    (r.status    || 'Active').trim(),
+          zone:      (r.zone         || '').trim(),
+          name:      (r.schoolName   || '').trim(),
+          type:      (r.schoolType   || '').trim(),
+          organiser: (r.organiserName || '').trim(),
+          phone:     (r.phone        || '').trim(),
+          role:      (r.role         || '').trim(),
+          status:    (r.status       || 'Active').trim(),
         }));
 
       const corrections = corrSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -392,8 +393,8 @@ const FirestoreDB = (() => {
         db.collection(COL_ZONE_SUBS).orderBy('timestamp', 'desc').limit(50).get(),
       ]);
       const feed = [
-        ...s2.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.school || '', participant: r.participant || r.participantName || '', type: r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
-        ...s3.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.school || '', participant: r.participant || r.participantName || '', type: r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
+        ...s2.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || d.id }; }),
+        ...s3.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || '', participant: r.fullName || '', learnerSubType: r.learnerSubType || '', category: r.category || '', ref: r.ref || d.id }; }),
       ].sort((a, b) => b.time < a.time ? -1 : 1);
       return { status: 'ok', recentFeed: feed.slice(0, 20) };
     } catch (e) {
