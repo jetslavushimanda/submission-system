@@ -98,15 +98,20 @@ const SchoolForm = (() => {
   </header>
 
   <div class="sf-body">
-    <!-- School Information Card -->
-    <div class="form-card">
-      <div class="card-title">School Information</div>
-      ${ir('Zone', _auth.zone)}
-      ${ir('School Name', _auth.schoolName)}
-      ${ir('School Type', _auth.schoolType)}
-      ${ir('School JETS Organiser', _auth.organiserName)}
-      ${ir('Phone', _auth.phone)}
-      <p class="sf-wrong-details">Wrong details? Contact the District JETS Organiser.</p>
+    <!-- School Information Card (Collapsible) -->
+    <div class="form-card collapsible-card" id="sf-info-card">
+      <div class="card-title collapsible-trigger" onclick="SchoolForm.toggleInfoCard()">
+        <span>School Information</span>
+        <span class="collapsible-arrow">&#9662;</span>
+      </div>
+      <div class="collapsible-content hidden" id="sf-info-content">
+        ${ir('Zone', _auth.zone)}
+        ${ir('School Name', _auth.schoolName)}
+        ${ir('School Type', _auth.schoolType)}
+        ${ir('School JETS Organiser', _auth.organiserName)}
+        ${ir('Phone', _auth.phone)}
+        <p class="sf-wrong-details">Wrong details? Contact the District JETS Organiser.</p>
+      </div>
     </div>
 
     <!-- Slots Tracker Card -->
@@ -1686,11 +1691,26 @@ const SchoolForm = (() => {
     btn.addEventListener('animationend', () => btn.classList.remove('btn-shake'), { once: true });
   }
 
+  function toggleInfoCard() {
+    const trigger = document.querySelector('#sf-info-card .collapsible-trigger');
+    const content = document.getElementById('sf-info-content');
+    if (!trigger || !content) return;
+    const isHidden = content.classList.contains('hidden');
+    if (isHidden) {
+      content.classList.remove('hidden');
+      trigger.classList.add('expanded');
+    } else {
+      content.classList.add('hidden');
+      trigger.classList.remove('expanded');
+    }
+  }
+
   return { 
     render, 
     resetAndReuseForm,
     viewSubmissionsFromSuccess,
-    submitWithBypass
+    submitWithBypass,
+    toggleInfoCard
   };
 
 })();

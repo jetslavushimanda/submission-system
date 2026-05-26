@@ -166,13 +166,18 @@ const ZoneForm = (() => {
   </header>
 
   <div class="sf-body">
-    <!-- Zone Information Card -->
-    <div class="form-card">
-      <div class="card-title">Zone Information</div>
-      ${ir('Zone Name', _auth.zone)}
-      ${ir('Zonal JETS Coordinator Name', _auth.organiserName)}
-      ${ir('Phone', _auth.phone)}
-      <p class="sf-wrong-details">Wrong details? Contact the District JETS Organiser.</p>
+    <!-- Zone Information Card (Collapsible) -->
+    <div class="form-card collapsible-card" id="zf-info-card">
+      <div class="card-title collapsible-trigger" onclick="ZoneForm.toggleInfoCard()">
+        <span>Zone Information</span>
+        <span class="collapsible-arrow">&#9662;</span>
+      </div>
+      <div class="collapsible-content hidden" id="zf-info-content">
+        ${ir('Zone Name', _auth.zone)}
+        ${ir('Zonal JETS Coordinator Name', _auth.organiserName)}
+        ${ir('Phone', _auth.phone)}
+        <p class="sf-wrong-details">Wrong details? Contact the District JETS Organiser.</p>
+      </div>
     </div>
 
     <!-- Slots Tracker Card -->
@@ -1864,11 +1869,26 @@ const ZoneForm = (() => {
     btn.addEventListener('animationend', () => btn.classList.remove('btn-shake'), { once: true });
   }
 
+  function toggleInfoCard() {
+    const trigger = document.querySelector('#zf-info-card .collapsible-trigger');
+    const content = document.getElementById('zf-info-content');
+    if (!trigger || !content) return;
+    const isHidden = content.classList.contains('hidden');
+    if (isHidden) {
+      content.classList.remove('hidden');
+      trigger.classList.add('expanded');
+    } else {
+      content.classList.add('hidden');
+      trigger.classList.remove('expanded');
+    }
+  }
+
   return { 
     render, 
     resetAndReuseForm,
     viewSubmissionsFromSuccess,
-    submitWithBypass
+    submitWithBypass,
+    toggleInfoCard
   };
 
 })();

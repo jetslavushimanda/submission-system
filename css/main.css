@@ -548,6 +548,43 @@ body {
   letter-spacing: 0.5px;
 }
 
+.collapsible-trigger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 0 !important;
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  transition: opacity 0.15s ease;
+}
+
+.collapsible-trigger.expanded {
+  margin-bottom: 14px !important;
+  border-bottom: 2px solid var(--border) !important;
+  padding-bottom: 10px !important;
+}
+
+.collapsible-arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  line-height: 1;
+}
+
+.collapsible-trigger.expanded .collapsible-arrow {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  transition: opacity 0.2s ease-out;
+}
+
+.collapsible-trigger:hover {
+  opacity: 0.8;
+}
+
 /* Form fields */
 .field {
   display: flex;
