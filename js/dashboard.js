@@ -110,13 +110,6 @@ const Dashboard = (() => {
     }
   }
 
-  function viewDriveFiles() {
-    window.open(
-      'https://drive.google.com',
-      '_blank'
-    );
-  }
-
   function downloadDatabaseBackup() {
     try {
       showSpinner('Generating backup...');
@@ -1040,9 +1033,6 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     <button onclick="Dashboard.exportZoneSubmissions()" class="db-action-btn db-action-secondary">
       Export Zone Submissions
     </button>
-    <button onclick="Dashboard.viewDriveFiles()" class="db-action-btn db-action-outline">
-      View Drive Files
-    </button>
   </div>
 </div>`;
   }
@@ -1909,7 +1899,6 @@ ${resolved.slice(0, 10).map(c => correctionCard(c)).join('')}`;
     exportAllToExcel,
     exportSchoolSubmissions,
     exportZoneSubmissions,
-    viewDriveFiles,
     downloadDatabaseBackup,
     runSystemDiagnostics
   };
