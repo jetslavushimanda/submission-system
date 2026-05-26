@@ -1303,7 +1303,7 @@ const ZoneForm = (() => {
 
     el.innerHTML =
       ['ECE & Primary', 'Junior Secondary', 'Senior Secondary'].map(lvl =>
-        innovSection(lvl + ' Innovations', (inn.learner[lvl] || {}), 3)
+        innovSection(lvl + ' Innovations', (inn.learner[lvl] || {}), 1)
       ).join('') +
       innovSection('Teacher Innovations', inn.teacher || {}, 1) +
       innovSection('Out-of-School Youth Innovations', inn.youth || {}, 1) +
