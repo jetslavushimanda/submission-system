@@ -33,11 +33,9 @@ const ZoneForm = (() => {
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
     bindFileChangeEvents();
-    loadSlotCount();
-    loadProgressData();
+    loadAllZoneData();
     startAutoSave();
     checkAndShowDraft();
-    fetchExistingSubmissions();
   }
 
   function effectiveTab() {
@@ -613,8 +611,7 @@ const ZoneForm = (() => {
       document.body.style.overflow = '';
     }
 
-    loadSlotCount();
-    loadProgressData();
+    loadAllZoneData();
   }
 
   function openDrawer(name) {
@@ -623,7 +620,7 @@ const ZoneForm = (() => {
     if (drawer) drawer.classList.add('active');
     if (overlay) overlay.classList.add('active');
     document.body.style.overflow = 'hidden';
-    loadProgressData();
+    loadAllZoneData();
   }
 
   function closeDrawer(name) {
@@ -1068,9 +1065,7 @@ const ZoneForm = (() => {
 
       _submitting = false;
       clearDraft();
-      loadSlotCount();
-      loadProgressData();
-      fetchExistingSubmissions();
+      loadAllZoneData();
       if (typeof WelcomeStats !== 'undefined') WelcomeStats.refresh();
       
       const sheet = document.getElementById('sheet-' + prefix);
@@ -1206,14 +1201,24 @@ const ZoneForm = (() => {
     };
   }
 
-  // ── Slot Counter ───────────────────────────────────────────────────
-  async function loadSlotCount() {
+  // ── Single combined load: slots + progress + existing subs ────
+  async function loadAllZoneData() {
     try {
-      const data = await FirestoreDB.getZoneCount(_auth.phone, _auth.zone);
+      const data = await FirestoreDB.getZoneAllData(_auth.phone, _auth.zone);
+      existingSubmissions = data.rows || [];
       if (typeof data.total === 'number') updateSlot(data.total);
+      if (data.progressData && data.progressData.status === 'ok') {
+        renderProgressBars(data.progressData);
+        const loading = document.getElementById('sf-progress-loading');
+        const body    = document.getElementById('sf-progress-data');
+        if (loading) loading.classList.add('hidden');
+        if (body)    body.classList.remove('hidden');
+      }
     } catch (_) {
       const el = document.getElementById('sf-slot-display');
       if (el) el.innerHTML = '&#8212; of ' + ZONE_SLOT_TOTAL;
+      const loading = document.getElementById('sf-progress-loading');
+      if (loading) loading.textContent = 'Could not load progress.';
     }
   }
 
@@ -1226,36 +1231,6 @@ const ZoneForm = (() => {
       fill.style.width = pct + '%';
       fill.classList.toggle('sf-slot-warn', pct >= 80 && pct < 100);
       fill.classList.toggle('sf-slot-full', pct >= 100);
-    }
-  }
-
-  // ── Submission list loader for quota checking ──
-  async function fetchExistingSubmissions() {
-    try {
-      const data = await FirestoreDB.getSubmissionHistory(
-        _auth.phone, 'zone', _auth.zone, _auth.schoolName
-      );
-      if (data.status === 'ok') {
-        existingSubmissions = data.rows || [];
-      }
-    } catch (_) {}
-  }
-
-  // ── Progress Bars ─────────────────────────────────────────────
-  async function loadProgressData() {
-    try {
-      const data = await FirestoreDB.getProgressData(
-        _auth.phone, 'zone', _auth.zone, _auth.schoolName
-      );
-      if (data.status !== 'ok') throw new Error(data.message);
-      renderProgressBars(data);
-      const loading = document.getElementById('sf-progress-loading');
-      const body    = document.getElementById('sf-progress-data');
-      if (loading) loading.classList.add('hidden');
-      if (body)    body.classList.remove('hidden');
-    } catch (_) {
-      const loading = document.getElementById('sf-progress-loading');
-      if (loading) loading.textContent = 'Could not load progress.';
     }
   }
 

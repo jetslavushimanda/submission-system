@@ -9,11 +9,11 @@ const SESSION_KEY = "jets_session";
 // Initialized to default values; refreshed from Settings tab on boot.
 let _deadlineSchoolOpen  = new Date("2026-05-26T00:00:00");
 let _deadlineSchoolClose = new Date("2026-05-30T23:59:00");
-let _deadlineZoneOpen    = new Date("2026-06-01T00:00:00");
+let _deadlineZoneOpen    = new Date("2026-05-25T00:00:00");
 let _deadlineZoneClose   = new Date("2026-06-05T23:59:00");
 
 function schoolClosed() { return new Date() > _deadlineSchoolClose; }
-function zoneNotOpen()  { return new Date() < _deadlineZoneOpen; }
+function zoneNotOpen()  { return false; }
 function zoneClosed()   { return new Date() > _deadlineZoneClose; }
 
 let currentMode = null;

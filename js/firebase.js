@@ -120,6 +120,56 @@ const FirestoreDB = (() => {
     return { status: 'ok', total: 0, innovations: 0, academics: 0, skills: 0 };
   }
 
+  // ── All zone data in one query (for fast zone-form load) ──────
+  async function getZoneAllData(phone, zone) {
+    try {
+      const snap = await db.collection(COL_ZONE_SUBS).where('zone', '==', zone).get();
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
+
+      const schoolSet = new Set(docs.map(d => d.participantSchool || d.schoolName || d.school).filter(Boolean));
+
+      const innovations            = { learner: {}, teacher: {}, youth: {} };
+      const academicsBySubjectLevel = {};
+      const skillsByCategory        = {};
+      docs.forEach(r => {
+        const pType   = r.participantType || '';
+        const subType = r.learnerSubType  || '';
+        const cat     = r.category        || '';
+        const lvl     = r.level           || '';
+        if (pType === 'Teacher') {
+          innovations.teacher[cat] = (innovations.teacher[cat] || 0) + 1;
+        } else if (pType === 'Out-of-School Youth') {
+          innovations.youth[cat] = (innovations.youth[cat] || 0) + 1;
+        } else if (pType === 'Learner') {
+          if (subType === 'Technical Skills') {
+            skillsByCategory[cat] = (skillsByCategory[cat] || 0) + 1;
+          } else if (subType === 'Academics / Quiz & Olympiads') {
+            const key = lvl + ':' + cat;
+            academicsBySubjectLevel[key] = (academicsBySubjectLevel[key] || 0) + 1;
+          } else {
+            innovations.learner[cat] = (innovations.learner[cat] || 0) + 1;
+          }
+        }
+      });
+
+      return {
+        status: 'ok',
+        rows:   docs,
+        total:  docs.length,
+        submittedSchools: [...schoolSet],
+        ..._catCounts(docs),
+        progressData: { status: 'ok', innovations, academicsBySubjectLevel, skillsByCategory, total: docs.length }
+      };
+    } catch (e) {
+      console.warn('getZoneAllData failed', e);
+      return {
+        status: 'ok', rows: [], total: 0, innovations: 0, academics: 0, skills: 0, submittedSchools: [],
+        progressData: { status: 'ok', innovations: { learner: {}, teacher: {}, youth: {} }, academicsBySubjectLevel: {}, skillsByCategory: {}, total: 0 }
+      };
+    }
+  }
+
   // ── Submission count for a zone ───────────────────────────────
   async function getZoneCount(phone, zone) {
     try {
@@ -515,6 +565,7 @@ const FirestoreDB = (() => {
     uploadFile,
     getSchoolCount,
     getZoneCount,
+    getZoneAllData,
     getWelcomeStats,
     getSubmissionHistory,
     getProgressData,
