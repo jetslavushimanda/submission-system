@@ -2499,6 +2499,19 @@ body {
   display: block;
 }
 
+.sf-grid-icon svg,
+.db-btn-icon svg {
+  width: 32px;
+  height: 32px;
+  stroke: var(--green-dark, #1a5c2a);
+  display: block;
+  margin: 0 auto;
+}
+
+#page-zone .sf-grid-icon svg {
+  stroke: var(--blue-dark, #1e3a5f);
+}
+
 .sf-grid-title,
 .db-btn-text {
   font-size: 14px;

@@ -133,27 +133,27 @@ const ZoneForm = (() => {
     <!-- Mobile-First Tab Grids -->
     <div class="sf-button-grid">
       <button class="sf-grid-btn" data-sheet="innovations">
-        <span class="sf-grid-icon">💡</span>
+        <span class="sf-grid-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6L15 17H9l-.7-2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/></svg></span>
         <span class="sf-grid-title">Innovations</span>
         <span class="sf-grid-desc">Learner, Teacher & Youth</span>
       </button>
       <button class="sf-grid-btn" data-sheet="academics">
-        <span class="sf-grid-icon">📚</span>
+        <span class="sf-grid-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
         <span class="sf-grid-title">Academics</span>
         <span class="sf-grid-desc">Quiz & Olympiads</span>
       </button>
       <button class="sf-grid-btn" data-sheet="skills">
-        <span class="sf-grid-icon">🛠️</span>
+        <span class="sf-grid-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
         <span class="sf-grid-title">Technical Skills</span>
         <span class="sf-grid-desc">Practical task tasks</span>
       </button>
       <button class="sf-grid-btn" data-sheet="tracker">
-        <span class="sf-grid-icon">📊</span>
+        <span class="sf-grid-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
         <span class="sf-grid-title">Submission Tracker</span>
         <span class="sf-grid-desc">Check zonal quotas</span>
       </button>
       <button class="sf-grid-btn" data-sheet="history">
-        <span class="sf-grid-icon">📋</span>
+        <span class="sf-grid-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
         <span class="sf-grid-title">View My Submissions</span>
         <span class="sf-grid-desc">History & corrections</span>
       </button>
