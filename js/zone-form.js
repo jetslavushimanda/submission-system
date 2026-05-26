@@ -387,13 +387,16 @@ const ZoneForm = (() => {
     <button class="btn-close-sheet" data-close="skills">&times;</button>
   </div>
   <div class="sheet-body">
-    <div class="form-card" id="sk-unavail-card">
-      <div class="alert alert-info">Technical Skills not available for this school type.<br>Choose a secondary school above first.</div>
-    </div>
-    
-    <div class="form-card hidden" id="sk-form-card">
+    <div class="form-card">
       <div class="card-title">Technical Skills Participant</div>
       ${buildSchoolSelectHTML('skills')}
+    </div>
+
+    <div class="form-card" id="sk-unavail-card">
+      <div class="alert alert-info">Technical Skills are only available for Secondary and Private schools. Please select an eligible school above.</div>
+    </div>
+
+    <div class="form-card hidden" id="sk-form-card">
       <div class="field">
         <label for="sk-level">Level <span class="req">*</span></label>
         <select id="sk-level" disabled>
