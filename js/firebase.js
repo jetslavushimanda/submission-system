@@ -69,7 +69,13 @@ const FirestoreDB = (() => {
         const d = snap.docs[0].data();
         return { found: true, ...d };
       }
-      return { found: false };
+      // Not found — gather debug info
+      const testSnap = await db.collection(COL_REGISTRATIONS).limit(1).get();
+      return {
+        found:       false,
+        collectionSize: testSnap.size,
+        searched:    phone.trim(),
+      };
     } catch (e) {
       console.warn('getRegistration failed', e);
       return { found: false, dbError: e.message || String(e) };

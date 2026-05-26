@@ -173,7 +173,7 @@ async function verifyPhone() {
     const data = await FirestoreDB.getRegistration(phone);
 
     if (data.dbError) {
-      msgEl.innerHTML = '<p class="auth-msg-error">Database error: ' + data.dbError + '</p>';
+      msgEl.innerHTML = '<p class="auth-msg-error">DB Error: ' + data.dbError + '</p>';
 
     } else if (!data.found) {
       authData = null;
@@ -182,7 +182,10 @@ async function verifyPhone() {
       sessionStorage.removeItem('userRole');
       sessionStorage.removeItem('schoolInfo');
       lockAllButtons();
-      msgEl.innerHTML = '<p class="auth-msg-error">Not registered. Contact the District JETS Organiser: 0973375828</p>';
+      const hint = data.collectionSize === 0
+        ? ' [Collection is empty]'
+        : ' [Searched: "' + data.searched + '" — collection has docs]';
+      msgEl.innerHTML = '<p class="auth-msg-error">Not registered.' + hint + '</p>';
 
     } else if (data.status !== 'Active') {
       authData = null;
