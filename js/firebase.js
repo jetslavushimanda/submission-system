@@ -25,9 +25,12 @@ if (!firebase.apps.length) {
   firebase.initializeApp(FIREBASE_CONFIG);
 }
 
-// Expose globally so all other scripts can use `db` and `storage`
-const db      = firebase.firestore();
-const storage = firebase.storage();
+// Firestore — core database
+const db = firebase.firestore();
+
+// Storage — optional, only needed for file uploads
+let _storage = null;
+try { _storage = firebase.storage(); } catch (_) {}
 
 // ── Collections ───────────────────────────────────────────────
 const COL_REGISTRATIONS   = 'registrations';
@@ -75,16 +78,18 @@ const FirestoreDB = (() => {
 
   // ── File upload to Firebase Storage ───────────────────────────
   async function uploadFile(base64, fileName, mimeType, phone) {
-    try {
-      const path = 'submissions/' + (phone || 'anon') + '/' + Date.now() + '_' + fileName;
-      const ref  = storage.ref(path);
-      await ref.putString(base64, 'base64', { contentType: mimeType });
-      const url = await ref.getDownloadURL();
-      return { status: 'ok', url };
-    } catch (e) {
-      console.warn('uploadFile failed — storing base64 inline', e);
-      return { status: 'ok', url: 'data:' + mimeType + ';base64,' + base64 };
+    if (_storage) {
+      try {
+        const path = 'submissions/' + (phone || 'anon') + '/' + Date.now() + '_' + fileName;
+        const ref  = _storage.ref(path);
+        await ref.putString(base64, 'base64', { contentType: mimeType });
+        const url = await ref.getDownloadURL();
+        return { status: 'ok', url };
+      } catch (e) {
+        console.warn('uploadFile via Storage failed — storing base64 inline', e);
+      }
     }
+    return { status: 'ok', url: 'data:' + mimeType + ';base64,' + base64 };
   }
 
   function _catCounts(docs) {
