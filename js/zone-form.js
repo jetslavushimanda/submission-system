@@ -53,6 +53,12 @@ const ZoneForm = (() => {
 
   const SKILL_CATEGORIES = Object.keys(SKILL_LIMITS);
 
+  function isLearnerInnov(c) {
+    if (!c || c.participantType !== 'Learner') return false;
+    const sub = c.learnerSubType || '';
+    return sub !== 'Academics / Quiz & Olympiads' && sub !== 'Technical Skills';
+  }
+
   // ── Entry Point ───────────────────────────────────────────────
   function render(pageId, auth) {
     _pageId = pageId;
@@ -919,8 +925,7 @@ const ZoneForm = (() => {
     INNOVATION_CATEGORIES.forEach(cat => {
       LEVELS.forEach(lvl => {
         const matches = _allCandidates.filter(c => 
-          c.participantType === 'Learner' &&
-          (c.learnerSubType || 'Innovations') === 'Innovations' &&
+          isLearnerInnov(c) &&
           c.category === cat &&
           c.level === lvl
         );
@@ -1056,8 +1061,7 @@ const ZoneForm = (() => {
       INNOVATION_CATEGORIES.forEach(cat => {
         LEVELS.forEach(lvl => {
           const candidates = _allCandidates.filter(c => 
-            c.participantType === 'Learner' &&
-            (c.learnerSubType || 'Innovations') === 'Innovations' &&
+            isLearnerInnov(c) &&
             c.category === cat &&
             c.level === lvl
           );
@@ -1189,8 +1193,7 @@ const ZoneForm = (() => {
         limit = 3;
         LEVELS.forEach(lvl => {
           const matches = _allCandidates.filter(c => 
-            c.participantType === 'Learner' &&
-            (c.learnerSubType || 'Innovations') === 'Innovations' &&
+            isLearnerInnov(c) &&
             c.category === cat &&
             c.level === lvl
           );
@@ -1261,8 +1264,7 @@ const ZoneForm = (() => {
     if (_activeTab === 'learner') {
       html = LEVELS.map(lvl => {
         const matches = _allCandidates.filter(c => 
-          c.participantType === 'Learner' &&
-          (c.learnerSubType || 'Innovations') === 'Innovations' &&
+          isLearnerInnov(c) &&
           c.category === _selectedCategory &&
           c.level === lvl
         );
@@ -1513,11 +1515,10 @@ const ZoneForm = (() => {
     if (!candidate) return;
 
     // Apply selection rules depending on section
-    if (candidate.participantType === 'Learner' && (candidate.learnerSubType || 'Innovations') === 'Innovations') {
+    if (isLearnerInnov(candidate)) {
       // Learner Innovations: Select ONLY 1 per level per category
       const siblings = _allCandidates.filter(c => 
-        c.participantType === 'Learner' &&
-        (c.learnerSubType || 'Innovations') === 'Innovations' &&
+        isLearnerInnov(c) &&
         c.category === candidate.category &&
         c.level === candidate.level
       );
@@ -1659,8 +1660,7 @@ const ZoneForm = (() => {
     INNOVATION_CATEGORIES.forEach(cat => {
       LEVELS.forEach(lvl => {
         const candidates = _allCandidates.filter(c => 
-          c.participantType === 'Learner' &&
-          (c.learnerSubType || 'Innovations') === 'Innovations' &&
+          isLearnerInnov(c) &&
           c.category === cat &&
           c.level === lvl
         );
@@ -1696,7 +1696,7 @@ const ZoneForm = (() => {
       if (candidates.length === 0) emptySlots.push(`Technical Skills — ${skill}`);
     });
 
-    const lInnov = selectedList.filter(c => c.participantType === 'Learner' && (c.learnerSubType || 'Innovations') === 'Innovations');
+    const lInnov = selectedList.filter(c => isLearnerInnov(c));
     const tInnov = selectedList.filter(c => c.participantType === 'Teacher');
     const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth');
     const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads');
@@ -1759,7 +1759,7 @@ const ZoneForm = (() => {
     const count = _selections.size;
     const selectedList = _allCandidates.filter(c => _selections.has(c.id));
 
-    const lInnov = selectedList.filter(c => c.participantType === 'Learner' && (c.learnerSubType || 'Innovations') === 'Innovations').length;
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
     const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
     const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
     const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
@@ -1869,7 +1869,7 @@ const ZoneForm = (() => {
     if (!successPanel || !successBody) return;
 
     const selectedList = _allCandidates.filter(c => _selections.has(c.id));
-    const lInnov = selectedList.filter(c => c.participantType === 'Learner' && (c.learnerSubType || 'Innovations') === 'Innovations').length;
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
     const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
     const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
     const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
@@ -1895,7 +1895,7 @@ const ZoneForm = (() => {
   function sendWhatsApp() {
     const total = _selections.size;
     const selectedList = _allCandidates.filter(c => _selections.has(c.id));
-    const lInnov = selectedList.filter(c => c.participantType === 'Learner' && (c.learnerSubType || 'Innovations') === 'Innovations').length;
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
     const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
     const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
     const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
