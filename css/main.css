@@ -2421,6 +2421,8 @@ body {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 12px;
 }
 
 #page-school .sheet-header {
@@ -2432,6 +2434,11 @@ body {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-close-sheet,
@@ -2447,13 +2454,19 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .btn-close-sheet:hover,
 .btn-close-drawer:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-close-sheet:active,
+.btn-close-drawer:active {
+  transform: scale(0.92);
 }
 
 .sheet-body,

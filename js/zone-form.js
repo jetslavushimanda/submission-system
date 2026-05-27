@@ -271,21 +271,41 @@ const ZoneForm = (() => {
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    background: var(--db-navy);
+    background: linear-gradient(135deg, var(--db-navy-dark), var(--db-navy));
     color: #fff;
+    flex-wrap: nowrap;
+    gap: 12px;
   }
   .sheet-title {
     font-size: 16px;
     font-weight: 700;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .btn-close-sheet {
-    background: none;
+    background: rgba(255, 255, 255, 0.15);
     border: none;
     color: #fff;
-    font-size: 26px;
+    font-size: 22px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    padding: 0 4px;
+    transition: background 0.2s, transform 0.1s;
     line-height: 1;
+    flex-shrink: 0;
+  }
+  .btn-close-sheet:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  .btn-close-sheet:active {
+    transform: scale(0.92);
   }
   .sheet-body {
     flex: 1;
