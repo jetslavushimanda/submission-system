@@ -37,8 +37,27 @@ const Dashboard = (() => {
     alert(msg);
   }
 
+  async function ensureSheetJS() {
+    if (typeof XLSX !== 'undefined') return;
+    return new Promise((resolve, reject) => {
+      showSpinner('Loading export library...');
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      script.onload = () => {
+        hideSpinner();
+        resolve();
+      };
+      script.onerror = () => {
+        hideSpinner();
+        reject(new Error('Failed to load excel export library. Please check your internet connection.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
   async function exportAllToExcel() {
     try {
+      await ensureSheetJS();
       showSpinner('Preparing export...');
 
       const [schoolSnap, zoneSnap] = await Promise.all([
@@ -70,6 +89,7 @@ const Dashboard = (() => {
 
   async function exportSchoolSubmissions() {
     try {
+      await ensureSheetJS();
       showSpinner('Preparing export...');
 
       const snapshot = await getDocs(
@@ -91,6 +111,7 @@ const Dashboard = (() => {
 
   async function exportZoneSubmissions() {
     try {
+      await ensureSheetJS();
       showSpinner('Preparing export...');
 
       const snapshot = await getDocs(
