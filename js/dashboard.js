@@ -319,18 +319,9 @@ const Dashboard = (() => {
 
   function skeletonHTML() {
     return `
-<div class="db-button-grid">
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-  <div class="db-skeleton" style="height: 100px; border-radius: 12px; margin-bottom: 0;"></div>
-</div>
-<div style="text-align: center; margin-top: 24px; color: var(--db-navy); font-weight: 600;">
-  Loading dashboard data...
+<div class="db-loading-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px; background: #ffffff; border-radius: 12px; border: 1.5px solid var(--db-border, #e2e8f0); box-shadow: var(--shadow-sm); padding: 32px; margin-bottom: 24px;">
+  <div class="db-spinner"></div>
+  <div class="db-loader-text" style="margin-top: 16px; font-size: 15px; color: var(--db-navy); font-weight: 600; font-family: inherit;">Loading dashboard data&#8230;</div>
 </div>
 `;
   }

@@ -551,29 +551,7 @@
   box-shadow: none;
 }
 
-/* ── Loading Skeleton ─────────────────────────────────────────── */
-@keyframes db-shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-.db-skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 800px 100%;
-  animation: db-shimmer 1.4s infinite;
-  border-radius: 6px;
-}
-
-.db-skeleton-counters {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 14px;
-}
-.db-skeleton-counter { height: 80px; }
-.db-skeleton-zone    { height: 90px; margin-bottom: 10px; }
-.db-skeleton-row     { height: 44px; margin-bottom: 6px; }
-.db-skeleton-feed    { height: 60px; margin-bottom: 6px; }
+/* Loading Skeleton removed */
 
 /* ── Error / empty states ─────────────────────────────────────── */
 .db-error {

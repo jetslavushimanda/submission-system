@@ -18,51 +18,7 @@ function zoneClosed()   { return new Date() > _deadlineZoneClose; }
 
 let currentMode = null;
 let authData    = null;
-
-// ── Network Status ────────────────────────────────────────────
-window.NetStatus = (() => {
-  let _offline = !navigator.onLine;
-  let _timer   = null;
-
-  function dot()    { return document.getElementById('net-dot'); }
-  function banner() { return document.getElementById('net-banner'); }
-
-  function applyDot(isOffline) {
-    const d = dot();
-    if (d) d.className = 'net-dot ' + (isOffline ? 'net-offline' : 'net-online');
-  }
-
-  function update(isOffline) {
-    _offline = isOffline;
-    applyDot(isOffline);
-    clearTimeout(_timer);
-
-    const b = banner();
-    if (!b) return;
-
-    if (isOffline) {
-      b.className  = 'net-banner net-banner-offline';
-      b.textContent = 'You are offline. Do not submit until reconnected.';
-      const sub = document.getElementById('sf-submit');
-      if (sub) sub.disabled = true;
-    } else {
-      b.className  = 'net-banner net-banner-online';
-      b.textContent = 'Connected. You can submit now.';
-      if (typeof window._sfValidate === 'function') window._sfValidate();
-      _timer = setTimeout(() => b.classList.add('hidden'), 3000);
-    }
-  }
-
-  window.addEventListener('offline', () => update(true));
-  window.addEventListener('online',  () => update(false));
-
-  document.addEventListener('DOMContentLoaded', () => {
-    applyDot(_offline);
-    if (_offline) update(true);
-  });
-
-  return { get isOffline() { return _offline; } };
-})();
+window.NetStatus = { isOffline: false };
 
 // ── Boot ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -75,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   updateCountdowns();
-  setInterval(updateCountdowns, 1000);
+  setInterval(updateCountdowns, 60000);
 
   // Fetch live deadlines from Settings tab (non-blocking)
   loadDeadlines();
@@ -396,7 +352,7 @@ function timerBoxesHTML(p) {
   const box = (v, lbl) =>
     `<div class="deadline-box"><span class="deadline-num">${pad2(v)}</span><span class="deadline-unit">${lbl}</span></div>`;
   const sep = `<div class="deadline-sep">:</div>`;
-  return `<div class="deadline-boxes">${box(p.d,'DAYS')}${sep}${box(p.h,'HRS')}${sep}${box(p.m,'MINS')}${sep}${box(p.s,'SECS')}</div>`;
+  return `<div class="deadline-boxes">${box(p.d,'DAYS')}${sep}${box(p.h,'HRS')}${sep}${box(p.m,'MINS')}</div>`;
 }
 
 function msToParts(ms) {

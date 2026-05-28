@@ -2121,32 +2121,7 @@ body {
 
 .ws-deadline.ws-dl-urgent { color: #dc2626; }
 
-/* Skeleton loading */
-.ws-skeleton { pointer-events: none; }
-
-.ws-skel {
-  background: linear-gradient(90deg, #e8e8e8 25%, #f4f4f4 50%, #e8e8e8 75%);
-  background-size: 200% 100%;
-  animation: ws-pulse 1.4s ease-in-out infinite;
-  border-radius: 6px;
-  margin-bottom: 8px;
-}
-
-.ws-skel-lg  { height: 18px; width: 70%; }
-.ws-skel-md  { height: 14px; width: 50%; }
-.ws-skel-sm  { height: 12px; width: 55%; }
-.ws-skel-row { height: 14px; width: 100%; }
-
-.ws-skel-sep {
-  height: 1px;
-  background: #e0e0e0;
-  margin: 10px 0;
-}
-
-@keyframes ws-pulse {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+/* Skeleton loading removed */
 
 /* Error state */
 .ws-error-card {

@@ -75,15 +75,9 @@ const WelcomeStats = (() => {
     const c = document.getElementById('welcome-stats-container');
     if (!c) return;
     c.innerHTML = `
-      <div class="ws-card ws-skeleton">
-        <div class="ws-skel ws-skel-lg"></div>
-        <div class="ws-skel ws-skel-md"></div>
-        <div class="ws-skel-sep"></div>
-        <div class="ws-skel ws-skel-sm"></div>
-        <div class="ws-skel ws-skel-row"></div>
-        <div class="ws-skel ws-skel-row"></div>
-        <div class="ws-skel ws-skel-row"></div>
-        <div class="ws-skel ws-skel-row"></div>
+      <div class="ws-card ws-loading-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 180px; padding: 24px;">
+        <div class="spinner-dark"></div>
+        <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted); font-weight: 500;">Loading statistics&#8230;</p>
       </div>`;
   }
 

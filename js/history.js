@@ -40,22 +40,6 @@ const SubmissionHistory = (() => {
 
 <div class="sh-body">
 
-  <div class="sh-controls form-card">
-    <div class="sh-filter-label">Filter by tab:</div>
-    <div class="sh-filter-tabs">
-      <button class="sh-ftab active" data-ftab="all">All</button>
-      <button class="sh-ftab" data-ftab="innovations">Innovations</button>
-      <button class="sh-ftab" data-ftab="academics">Academics</button>
-      <button class="sh-ftab" data-ftab="skills">Skills</button>
-    </div>
-    <div class="sh-search-row">
-      <input type="text" id="sh-search-name" class="sh-search"
-             placeholder="Search by participant name&#8230;" autocomplete="off">
-      <input type="text" id="sh-search-ref"  class="sh-search"
-             placeholder="Search by reference number&#8230;" autocomplete="off">
-    </div>
-  </div>
-
   <div id="sh-list-wrap" class="sh-list-wrap">
     <div class="sh-loading">
       <div class="spinner-dark"></div>
@@ -113,7 +97,7 @@ ${buildCorrectionModalHTML()}`;
       );
       if (data.status !== 'ok') throw new Error(data.message || 'Failed to load history.');
 
-      _allRows = data.rows || [];
+      _allRows = (data.rows || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       applyFilters();
       renderList();
       renderSummary();
@@ -140,21 +124,7 @@ ${buildCorrectionModalHTML()}`;
 
   // ── Filter & Search ───────────────────────────────────────────
   function applyFilters() {
-    let rows = _allRows.slice();
-
-    if (_filterTab !== 'all') {
-      rows = rows.filter(r => tabLabel(r.participantType).toLowerCase() === _filterTab);
-    }
-    if (_searchName) {
-      const q = _searchName.toLowerCase();
-      rows = rows.filter(r => (r.fullName || '').toLowerCase().includes(q));
-    }
-    if (_searchRef) {
-      const q = _searchRef.toLowerCase();
-      rows = rows.filter(r => (r.ref || '').toLowerCase().includes(q));
-    }
-
-    _filtered = rows;
+    _filtered = _allRows;
   }
 
   // ── Render List ───────────────────────────────────────────────
@@ -373,21 +343,6 @@ ${buildCorrectionModalHTML()}`;
 
   // ── Events ────────────────────────────────────────────────────
   function bindEvents() {
-    document.querySelectorAll('.sh-ftab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.sh-ftab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        _filterTab = btn.dataset.ftab;
-        applyFilters();
-        renderList();
-      });
-    });
-
-    const nameEl = document.getElementById('sh-search-name');
-    const refEl  = document.getElementById('sh-search-ref');
-    if (nameEl) nameEl.addEventListener('input', () => { _searchName = nameEl.value; applyFilters(); renderList(); });
-    if (refEl)  refEl.addEventListener('input',  () => { _searchRef  = refEl.value;  applyFilters(); renderList(); });
-
     // Modal events
     const closeBtn  = document.getElementById('sh-corr-close');
     const submitBtn = document.getElementById('sh-corr-submit');
