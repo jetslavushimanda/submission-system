@@ -65,21 +65,7 @@ const FirestoreDB = (() => {
     }
   }
 
-  // ── File upload ──────────────────────────────────────────────
-  async function uploadFile(base64, fileName, mimeType, phone) {
-    if (_storage) {
-      try {
-        const path = 'submissions/' + (phone || 'anon') + '/' + Date.now() + '_' + fileName;
-        const ref  = _storage.ref(path);
-        await ref.putString(base64, 'base64', { contentType: mimeType });
-        const url = await ref.getDownloadURL();
-        return { status: 'ok', url };
-      } catch (e) {
-        console.warn('uploadFile via Storage failed — storing base64 inline', e);
-      }
-    }
-    return { status: 'ok', url: 'data:' + mimeType + ';base64,' + base64 };
-  }
+
 
   function _catCounts(docs) {
     const innovations = docs.filter(d => (d.learnerSubType || '') !== 'Academics / Quiz & Olympiads' && (d.learnerSubType || '') !== 'Technical Skills').length;
@@ -585,7 +571,6 @@ const FirestoreDB = (() => {
     getDeadlines,
     saveDeadlines,
     getRegistration,
-    uploadFile,
     getSchoolCount,
     getZoneCount,
     getZoneAllData,

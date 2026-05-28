@@ -54,17 +54,17 @@ At the bottom of the screen you will see a tab called **Sheet1**. You need to cr
 
 > Filled automatically by the system. Do not edit.
 
-| A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Timestamp | Ref# | Zone | School | School Type | Organiser | Phone | Participant Type | Level | Full Name | Age | Sex | Grade | Category | Sub-Skill | Innovation Title | Supervising Teacher/Mentor | Report Drive Link | Submitted By |
+| A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Timestamp | Ref# | Zone | School | School Type | Organiser | Phone | Participant Type | Level | Full Name | Age | Sex | Grade | Category | Sub-Skill | Innovation Title | Supervising Teacher/Mentor | Submitted By |
 
 **Tab 3 — `Zone Submissions`**
 
 > Filled automatically by the system. Do not edit.
 
-| A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Timestamp | Ref# | Zone | Zonal Coordinator | Phone | Participant School | School Type | Participant Type | Level | Full Name | Age | Sex | Grade | Category | Sub-Skill | Innovation Title | Supervising Teacher/Mentor | Report Drive Link | Submitted By |
+| A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Timestamp | Ref# | Zone | Zonal Coordinator | Phone | Participant School | School Type | Participant Type | Level | Full Name | Age | Sex | Grade | Category | Sub-Skill | Innovation Title | Supervising Teacher/Mentor | Submitted By |
 
 **Tab 4 — `District Dashboard`**
 
@@ -92,56 +92,7 @@ Example Sheet ID: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
 
 ---
 
-## SECTION 3 — GOOGLE DRIVE SETUP
-
-### Step 1: Create the main folder
-
-1. Go to [drive.google.com](https://drive.google.com).
-2. Click **+ New > Folder**.
-3. Name the folder:
-
-```
-JETS Lavushimanda 2024-2026
-```
-
-### Step 2: Create subfolders inside the main folder
-
-Open the folder you just created, then create two subfolders inside it:
-
-```
-School Submissions
-Zone Submissions
-```
-
-### Step 3: Create zone folders inside Zone Submissions
-
-Open the **Zone Submissions** folder, then create these 5 folders inside it:
-
-```
-Mpumba
-Chiundaponde
-Lukulu
-Kalonje
-Mwelushi
-```
-
-### Step 4: Copy your Drive Folder ID
-
-Click on the main **JETS Lavushimanda 2024-2026** folder to open it. Look at the URL:
-
-```
-https://drive.google.com/drive/folders/1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
-```
-
-The Folder ID is the long string at the end after `/folders/`. Copy it and save it.
-
-```
-Example Folder ID: 1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
-```
-
----
-
-## SECTION 4 — APPS SCRIPT DEPLOYMENT
+## SECTION 3 — APPS SCRIPT DEPLOYMENT
 
 ### Step 1: Open Apps Script
 
@@ -175,20 +126,18 @@ Open each file and paste in the corresponding script content from the `apps-scri
 | `school.gs` | `apps-script/school.gs` |
 | `zone.gs` | `apps-script/zone.gs` |
 
-### Step 4: Fill in your IDs in Code.gs
+### Step 4: Fill in your Sheet ID in Code.gs
 
-Open `Code.gs` and find these two lines near the top:
+Open `Code.gs` and find this line near the top:
 
 ```javascript
 const SHEET_ID = "";
-const DRIVE_FOLDER_ID = "";
 ```
 
-Paste your values between the quotes:
+Paste your value between the quotes:
 
 ```javascript
 const SHEET_ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms";
-const DRIVE_FOLDER_ID = "1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p";
 ```
 
 Save the file by pressing **Ctrl + S** (or **Cmd + S** on Mac).
@@ -220,7 +169,7 @@ Copy this URL and save it — you will need it in the next section.
 
 ---
 
-## SECTION 5 — GITHUB PAGES SETUP
+## SECTION 4 — GITHUB PAGES SETUP
 
 ### Step 1: Create a GitHub account
 
@@ -299,7 +248,7 @@ This single link works for all schools and zones in Lavushimanda District.
 
 ---
 
-## SECTION 6 — REGISTERING SCHOOLS (DEC ONLY)
+## SECTION 5 — REGISTERING SCHOOLS (DEC ONLY)
 
 Only the DEC registers schools. Schools cannot register themselves.
 
@@ -331,7 +280,7 @@ Only the DEC registers schools. Schools cannot register themselves.
 
 ---
 
-## SECTION 7 — SHARING THE PORTAL
+## SECTION 6 — SHARING THE PORTAL
 
 Once setup is complete, share the GitHub Pages link on your DEC WhatsApp group and with all Zone Chairpersons.
 
@@ -353,7 +302,7 @@ Zone Chairpersons: use the same link to submit zone documents.
 
 ---
 
-## SECTION 8 — TROUBLESHOOTING
+## SECTION 7 — TROUBLESHOOTING
 
 ### Form not loading
 
@@ -395,18 +344,6 @@ Zone Chairpersons: use the same link to submit zone documents.
 
 ---
 
-### File upload failing
-
-**Symptom:** The file upload shows an error or does not complete.
-
-**Steps to fix:**
-1. Confirm the file is under **10MB**.
-2. Confirm the file format is one of: `.doc`, `.docx`, or `.pdf`.
-3. Ask the organiser to reduce the file size (compress or export as PDF) if it is too large.
-4. Check that the internet connection is stable before trying again.
-
----
-
 ### CORS error
 
 **Symptom:** Submission fails and the browser shows a CORS error (visible in browser developer tools).
@@ -425,7 +362,6 @@ Zone Chairpersons: use the same link to submit zone documents.
 | Item | Where to find it |
 |------|-----------------|
 | Sheet ID | Google Sheets URL — the long string between `/d/` and `/edit` |
-| Drive Folder ID | Google Drive folder URL — the string after `/folders/` |
 | Apps Script Web App URL | Apps Script > Deploy > Manage deployments |
 | GitHub Pages URL | GitHub repo > Settings > Pages |
 

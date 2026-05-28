@@ -6,7 +6,6 @@ const SchoolForm = (() => {
   let _pageId, _auth, _activeMain, _activeSub, _slotTotal;
   let _draftTimer, _restoring = false, _draftListenersAdded = false, _submitting = false;
   let existingSubmissions = [];
-  let fileDataInMemory = { base64: null, name: null, type: null };
   let _bypassDuplicateOnce = false;
 
   const DRAFT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -27,12 +26,10 @@ const SchoolForm = (() => {
     _activeSub  = 'learner';
     _slotTotal  = SLOT_TOTALS[auth.schoolType] || 30;
     
-    fileDataInMemory = { base64: null, name: null, type: null };
     _bypassDuplicateOnce = false;
 
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
-    bindFileChangeEvents();
     loadSlotCount();
     loadProgressData();
     startAutoSave();
@@ -221,11 +218,7 @@ const SchoolForm = (() => {
             <label for="l-title">Title of Innovation</label>
             <input type="text" id="l-title" placeholder="Enter title of innovation">
           </div>
-          <div class="field hidden" id="l-report-field">
-            <label for="l-report">Innovation Report</label>
-            <input type="file" id="l-report" accept=".doc,.docx,.pdf">
-            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
-          </div>
+
           <div class="field">
             <label for="l-teacher">Supervising Teacher Name <span class="req">*</span></label>
             <input type="text" id="l-teacher" placeholder="Full name of supervising teacher">
@@ -262,11 +255,7 @@ const SchoolForm = (() => {
             <label for="t-title">Title of Innovation</label>
             <input type="text" id="t-title" placeholder="Enter title of innovation">
           </div>
-          <div class="field">
-            <label for="t-report">Innovation Report</label>
-            <input type="file" id="t-report" accept=".doc,.docx,.pdf">
-            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
-          </div>
+
         </div>
       </div>
     </div>
@@ -303,11 +292,7 @@ const SchoolForm = (() => {
             <label for="y-title">Title of Innovation</label>
             <input type="text" id="y-title" placeholder="Enter title of innovation">
           </div>
-          <div class="field">
-            <label for="y-report">Innovation Report</label>
-            <input type="file" id="y-report" accept=".doc,.docx,.pdf">
-            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
-          </div>
+
           <div class="field">
             <label for="y-mentor">Mentor Name <span class="req">*</span></label>
             <input type="text" id="y-mentor" placeholder="Full name of mentor">
@@ -433,11 +418,7 @@ const SchoolForm = (() => {
           <label for="sk-title">Title of Innovation</label>
           <input type="text" id="sk-title" placeholder="Enter title of innovation">
         </div>
-        <div class="field hidden" id="sk-report-field">
-          <label for="sk-report">Innovation Report</label>
-          <input type="file" id="sk-report" accept=".doc,.docx,.pdf">
-          <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
-        </div>
+
         <div class="field">
           <label for="sk-teacher">Supervising Teacher Name <span class="req">*</span></label>
           <input type="text" id="sk-teacher" placeholder="Full name of supervising teacher">
@@ -784,13 +765,9 @@ const SchoolForm = (() => {
       container.innerHTML = container.dataset[origKey];
       if (submitBtn) submitBtn.disabled = false;
       if (declCard) declCard.classList.remove('hidden');
-      
-      // Re-bind listeners inside restored swappable content (like file inputs)
-      bindFileChangeEvents();
     }
   }
 
-  // ── Learner (Innovation) Cascades ────────────────────────────
   function onLevelChange() {
     const level  = v('l-level');
     const grades = GRADES_BY_LEVEL[level] || [];
@@ -800,7 +777,7 @@ const SchoolForm = (() => {
     gSel.disabled = !grades.length;
     level ? show('l-cat-field') : hide('l-cat-field');
     document.getElementById('l-cat').value = '';
-    hide('l-title-field'); hide('l-report-field');
+    hide('l-title-field');
     
     // Check quota slots
     onInnovCatChange();
@@ -809,7 +786,6 @@ const SchoolForm = (() => {
   function onInnovCatChange() {
     const cat = v('l-cat');
     cat ? show('l-title-field')  : hide('l-title-field');
-    cat ? show('l-report-field') : hide('l-report-field');
     
     handleSlotQuotaAlert('l-swappable-fields', cat, v('l-level'), 'Learner', 'innovations');
   }
@@ -866,7 +842,6 @@ const SchoolForm = (() => {
       sSel.disabled = !subs.length;
     }
     const cosm = cat === 'Cosmetology';
-    cosm ? show('sk-report-field') : hide('sk-report-field');
     cosm ? show('sk-title-field')  : hide('sk-title-field');
     
     handleSlotQuotaAlert('sk-swappable-fields', cat, v('sk-level'), 'Technical Skills', 'skills');
@@ -965,14 +940,7 @@ const SchoolForm = (() => {
     msg.innerHTML = '';
 
     try {
-      if (fileDataInMemory.base64) {
-        btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
-        const fileData = await FirestoreDB.uploadFile(
-          fileDataInMemory.base64, fileDataInMemory.name, fileDataInMemory.type, _auth.phone
-        );
-        if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
-        payload.fileUrl = fileData.url;
-      }
+
 
       btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
       const data = await FirestoreDB.submitSchool(payload);
@@ -1056,7 +1024,6 @@ const SchoolForm = (() => {
 
   function resetAndReuseForm(prefix) {
     resetFormFields();
-    fileDataInMemory = { base64: null, name: null, type: null };
     _bypassDuplicateOnce = false;
 
     const btn = document.getElementById(`${prefix}-sf-submit`);
