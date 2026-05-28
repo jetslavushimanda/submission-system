@@ -14,10 +14,7 @@ const Dashboard = (() => {
 
   // ── Modular Firebase SDK Compat Helpers ───────────────────────
   function collection(db, path) {
-    const actualPath = (path === 'submissions') ? 'school_submissions'
-                     : (path === 'zone_submissions') ? 'zone_submissions'
-                     : path;
-    return db.collection(actualPath);
+    return db.collection(path);
   }
   async function getDocs(q) {
     return await q.get();
@@ -60,22 +57,13 @@ const Dashboard = (() => {
       await ensureSheetJS();
       showSpinner('Preparing export...');
 
-      const [schoolSnap, zoneSnap] = await Promise.all([
-        getDocs(collection(db, 'submissions')),
-        getDocs(collection(db, 'zone_submissions'))
-      ]);
+      const snap = await getDocs(collection(db, 'submissions'));
+      const allData = snap.docs.map(d => d.data());
+      const zoneSelections = allData.filter(d => d.selectedForDistrict === true);
 
-      const schoolData = schoolSnap.docs.map(d => d.data());
-      const zoneData = zoneSnap.docs.map(d => d.data());
-
-      // Create workbook with two sheets
       const wb = XLSX.utils.book_new();
-
-      const schoolSheet = XLSX.utils.json_to_sheet(schoolData);
-      XLSX.utils.book_append_sheet(wb, schoolSheet, 'School Submissions');
-
-      const zoneSheet = XLSX.utils.json_to_sheet(zoneData);
-      XLSX.utils.book_append_sheet(wb, zoneSheet, 'Zone Submissions');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allData), 'All Submissions');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(zoneSelections), 'Zone Selections');
 
       XLSX.writeFile(wb, 'JETS_Lavushimanda_2026_All_Submissions.xlsx');
       hideSpinner();
@@ -114,14 +102,12 @@ const Dashboard = (() => {
       await ensureSheetJS();
       showSpinner('Preparing export...');
 
-      const snapshot = await getDocs(
-        collection(db, 'zone_submissions'));
-      const data = snapshot.docs.map(d => d.data());
+      const snap = await getDocs(collection(db, 'submissions'));
+      const data = snap.docs.map(d => d.data()).filter(d => d.selectedForDistrict === true);
 
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, ws, 'Zone Submissions');
-      XLSX.writeFile(wb, 'JETS_Zone_Submissions_2026.xlsx');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Zone Selections');
+      XLSX.writeFile(wb, 'JETS_Zone_Selections_2026.xlsx');
 
       hideSpinner();
     } catch (error) {
@@ -141,8 +127,8 @@ const Dashboard = (() => {
         exportedAt: new Date().toISOString(),
         stats: _data.overview,
         organisers: _organisers || _data.allSchoolRecords || [],
-        schoolSubmissions: (_allSubs || []).filter(s => s.source === 'School'),
-        zoneSubmissions: (_allSubs || []).filter(s => s.source === 'Zone'),
+        schoolSubmissions: (_allSubs || []),
+        zoneSelections: (_allSubs || []).filter(s => s.selectedForDistrict),
         correctionRequests: _data.corrections || []
       };
 
@@ -554,7 +540,7 @@ const Dashboard = (() => {
 <!-- Drawer 2: Zone Progress -->
 <div id="drawer-zone" class="bottom-drawer">
   <div class="drawer-header">
-    <span class="drawer-title">Zone Submission Progress</span>
+    <span class="drawer-title">Zone Selection Progress</span>
     <button class="btn-close-drawer" onclick="Dashboard.closeActiveDrawer()">&times;</button>
   </div>
   <div class="drawer-body">

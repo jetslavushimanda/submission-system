@@ -4,11 +4,11 @@
 const ZoneForm = (() => {
 
   let _pageId, _auth, _submitting = false;
-  
+  let _unsubscribe = null;
+
   // State variables
   let _allCandidates = [];       // Array of all school submissions in zone
-  let _selections = new Set();    // Set of selected candidate IDs
-  let _autoSelections = new Set(); // Set of auto-selected candidate IDs
+  let _selections = new Set();    // Set of selected candidate IDs (persisted in Firestore)
   let _activeSheet = null;
   let _activeTab = 'learner';      // 'learner' | 'teacher' | 'youth'
   
@@ -64,8 +64,7 @@ const ZoneForm = (() => {
     _pageId = pageId;
     _auth = auth;
     _submitting = false;
-    _selections.clear();
-    _autoSelections.clear();
+    _selections = new Set();
     _activeSheet = null;
     _activeTab = 'learner';
     _selectedCategory = null;
@@ -77,7 +76,9 @@ const ZoneForm = (() => {
     loadAllZoneData();
   }
 
-  function destroy() {}
+  function destroy() {
+    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
+  }
 
   // ── Full Page HTML ────────────────────────────────────────────
   function buildHTML() {
@@ -709,7 +710,7 @@ const ZoneForm = (() => {
 
     <!-- Grid Buttons Layout -->
     <div class="selection-grid">
-      <button class="selection-btn" onclick="ZoneForm.openSheet('innovations')">
+      <button class="selection-btn" onclick="ZoneForm.openInnovationsSheet()">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6L15 17H9l-.7-2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/></svg></span>
         <span class="selection-btn-title">INNOVATIONS</span>
         <span class="selection-btn-badge badge-empty" id="badge-innovations">0/27</span>
@@ -727,13 +728,13 @@ const ZoneForm = (() => {
         <span class="selection-btn-badge badge-empty" id="badge-skills">0/12</span>
       </button>
 
-      <button class="selection-btn" onclick="ZoneForm.openSheet('teachers')">
+      <button class="selection-btn" onclick="ZoneForm.openTeachersSheet()">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="selection-btn-title">TEACHERS</span>
         <span class="selection-btn-badge badge-empty" id="badge-teachers">0/9</span>
       </button>
 
-      <button class="selection-btn" onclick="ZoneForm.openSheet('youth')">
+      <button class="selection-btn" onclick="ZoneForm.openYouthSheet()">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg></span>
         <span class="selection-btn-title">YOUTH</span>
         <span class="selection-btn-badge badge-empty" id="badge-youth">0/9</span>
@@ -741,12 +742,12 @@ const ZoneForm = (() => {
 
       <button class="selection-btn" onclick="ZoneForm.openSummary()">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
-        <span class="selection-btn-title">SUMMARY</span>
+        <span class="selection-btn-title">SELECTED PARTICIPANTS</span>
         <span class="selection-btn-badge badge-empty" id="badge-summary" style="background:#f0f4fa; color:var(--db-navy);">VIEW</span>
       </button>
 
-      <button class="selection-btn selection-btn-full" onclick="ZoneForm.openConfirmSubmit()">
-        <span class="selection-btn-title" id="submit-btn-label">SUBMIT 0 OF 64 SELECTIONS</span>
+      <button class="selection-btn selection-btn-full" onclick="ZoneForm.openZoneRecords()">
+        <span class="selection-btn-title">ZONE RECORDS</span>
       </button>
     </div>
   </div>
@@ -840,29 +841,13 @@ const ZoneForm = (() => {
   </div>
 </div>
 
-<!-- Bottom Drawer: Submit Selections Confirmation -->
-<div id="drawer-confirm" class="slide-sheet" style="top: auto; bottom: -100%; height: 70%; width: 100%; max-width: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
-  <div class="sheet-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--db-navy);">
-    <span class="sheet-title">Confirm Zone Selections</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.closeDrawer('confirm')">&times;</button>
+<!-- Bottom Drawer: Zone Records -->
+<div id="drawer-zone-records" class="slide-sheet" style="top: auto; bottom: -100%; height: 85%; width: 100%; max-width: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+  <div class="sheet-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+    <span class="sheet-title">Zone Records — All Submissions</span>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeDrawer('zone-records')">&times;</button>
   </div>
-  <div class="sheet-body" id="confirm-body" style="padding: 24px;">
-  </div>
-</div>
-
-<!-- Submission Success Overlay -->
-<div id="panel-success" class="success-panel hidden">
-  <div class="success-icon">&#10004;</div>
-  <div class="success-title">Selections Successfully Submitted!</div>
-  <div class="success-card" id="success-card-body">
-  </div>
-  <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 400px;">
-    <button onclick="ZoneForm.sendWhatsApp()" class="db-action-btn db-action-primary" style="background:#25d366; color:#fff; padding: 14px; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
-      💬 SEND WHATSAPP REPORT
-    </button>
-    <button onclick="App.backToLanding()" class="db-action-btn db-action-outline" style="border:1.5px solid var(--db-navy); color:var(--db-navy); background:#fff; padding: 14px; font-weight:700; border-radius:8px; cursor:pointer;">
-      🏡 RETURN TO LANDING
-    </button>
+  <div class="sheet-body" id="zone-records-body">
   </div>
 </div>
 `;
@@ -878,32 +863,63 @@ const ZoneForm = (() => {
     if (arrow) arrow.classList.toggle('open', isHidden);
   }
 
+  function _normalise(data) {
+    if (!data.learnerSubType && data.type)       data.learnerSubType = data.type;
+    if (!data.fullName && data.participant)       data.fullName = data.participant;
+    if (!data.schoolName && data.school)          data.schoolName = data.school;
+    if (data.category)       data.category       = (data.category + '').trim();
+    if (data.level)          data.level          = (data.level + '').trim();
+    if (data.learnerSubType) data.learnerSubType = (data.learnerSubType + '').trim();
+    return data;
+  }
+
   // ── Database Data Loading ─────────────────────────────────────
   async function loadAllZoneData() {
     const spinner = document.getElementById('zf-initial-loading');
     const content = document.getElementById('zf-main-content');
     try {
-      // Query all school submissions inside coordinator's zone
-      const snap = await db.collection('school_submissions')
-        .where('zone', '==', _auth.zone)
-        .get();
-      
-      _allCandidates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      // Fetch existing selections to recover state if already submitted
-      const selectionSnap = await db.collection('zone_submissions')
+      // Initial load
+      const snap = await db.collection('submissions')
         .where('zone', '==', _auth.zone)
         .get();
 
-      const existingSelIds = new Set(selectionSnap.docs.map(d => d.id));
+      _allCandidates = snap.docs.map(d => {
+        const data = _normalise({ ...d.data() });
+        return { id: d.id, ...data };
+      });
 
-      // Calculate auto-selections
-      precomputeSelections(existingSelIds);
+      _selections = new Set(_allCandidates.filter(c => c.selectedForDistrict === true).map(c => c.id));
 
       updateDashboardState();
 
+      // Real-time listener — keeps state in sync with Firestore
+      if (_unsubscribe) _unsubscribe();
+      _unsubscribe = db.collection('submissions')
+        .where('zone', '==', _auth.zone)
+        .onSnapshot(liveSnap => {
+          _allCandidates = liveSnap.docs.map(d => {
+            const data = _normalise({ ...d.data() });
+            return { id: d.id, ...data };
+          });
+          _selections = new Set(_allCandidates.filter(c => c.selectedForDistrict === true).map(c => c.id));
+
+          updateDashboardState();
+          // Refresh any open sheets
+          if (_activeSheet === 'innovations') switchSubTab(_activeTab);
+          else if (_activeSheet === 'academics') renderAcademicsSheet();
+          else if (_activeSheet === 'skills') renderSkillsSheet();
+          if (_selectedCategory) renderCategoryDetailBody();
+          if (_selectedSubject) renderAcadDetailBody();
+          if (_selectedSkill) renderSkillDetailBody();
+          // Refresh summary if open
+          const summaryDrawer = document.getElementById('drawer-summary');
+          if (summaryDrawer && summaryDrawer.classList.contains('active')) renderSummaryBody();
+        }, err => {
+          console.error('onSnapshot error', err);
+        });
+
     } catch (err) {
-      console.error('Failed to load school submissions roster', err);
+      console.error('Failed to load submissions roster', err);
       alert('Error fetching submission roster. Please try again.');
     } finally {
       if (spinner) spinner.classList.add('hidden');
@@ -914,102 +930,6 @@ const ZoneForm = (() => {
   // Helper to generate info rows
   function ir(lbl, val) {
     return `<div class="info-row"><span class="info-label">${lbl}</span><span class="info-value">${val}</span></div>`;
-  }
-
-  // ── State Computation ─────────────────────────────────────────
-  function precomputeSelections(existingSelIds) {
-    _selections.clear();
-    _autoSelections.clear();
-
-    // 1. Learner Innovations
-    INNOVATION_CATEGORIES.forEach(cat => {
-      LEVELS.forEach(lvl => {
-        const matches = _allCandidates.filter(c => 
-          isLearnerInnov(c) &&
-          c.category === cat &&
-          c.level === lvl
-        );
-        if (matches.length === 1) {
-          const cid = matches[0].id;
-          _autoSelections.add(cid);
-          _selections.add(cid);
-        } else if (matches.length > 1) {
-          // If already submitted previously, restore selection
-          const prev = matches.find(m => existingSelIds.has(m.id));
-          if (prev) _selections.add(prev.id);
-        }
-      });
-    });
-
-    // 2. Teacher Innovations
-    INNOVATION_CATEGORIES.forEach(cat => {
-      const matches = _allCandidates.filter(c => 
-        c.participantType === 'Teacher' &&
-        c.category === cat
-      );
-      if (matches.length === 1) {
-        const cid = matches[0].id;
-        _autoSelections.add(cid);
-        _selections.add(cid);
-      } else if (matches.length > 1) {
-        const prev = matches.find(m => existingSelIds.has(m.id));
-        if (prev) _selections.add(prev.id);
-      }
-    });
-
-    // 3. Youth Innovations
-    INNOVATION_CATEGORIES.forEach(cat => {
-      const matches = _allCandidates.filter(c => 
-        c.participantType === 'Out-of-School Youth' &&
-        c.category === cat
-      );
-      if (matches.length === 1) {
-        const cid = matches[0].id;
-        _autoSelections.add(cid);
-        _selections.add(cid);
-      } else if (matches.length > 1) {
-        const prev = matches.find(m => existingSelIds.has(m.id));
-        if (prev) _selections.add(prev.id);
-      }
-    });
-
-    // 4. Academics
-    ACADEMIC_SLOTS.forEach(slot => {
-      const matches = _allCandidates.filter(c => 
-        c.participantType === 'Learner' &&
-        c.learnerSubType === 'Academics / Quiz & Olympiads' &&
-        c.category === slot.category &&
-        c.level === slot.level
-      );
-      if (matches.length === 1) {
-        const cid = matches[0].id;
-        _autoSelections.add(cid);
-        _selections.add(cid);
-      } else if (matches.length > 1) {
-        const prev = matches.find(m => existingSelIds.has(m.id));
-        if (prev) _selections.add(prev.id);
-      }
-    });
-
-    // 5. Technical Skills
-    SKILL_CATEGORIES.forEach(skill => {
-      const limit = SKILL_LIMITS[skill];
-      const matches = _allCandidates.filter(c => 
-        c.participantType === 'Learner' &&
-        c.learnerSubType === 'Technical Skills' &&
-        c.category === skill
-      );
-      if (matches.length <= limit) {
-        matches.forEach(m => {
-          _autoSelections.add(m.id);
-          _selections.add(m.id);
-        });
-      } else {
-        matches.forEach(m => {
-          if (existingSelIds.has(m.id)) _selections.add(m.id);
-        });
-      }
-    });
   }
 
   // Real-time counter and progress bar states
@@ -1045,10 +965,6 @@ const ZoneForm = (() => {
 
     // Main button progress badges
     updateGridBadges();
-
-    // Bottom submit button text
-    const submitBtn = document.getElementById('submit-btn-label');
-    if (submitBtn) submitBtn.textContent = `SUBMIT ${count} OF 64 SELECTIONS`;
   }
 
   // Section quota badge calculators
@@ -1153,6 +1069,21 @@ const ZoneForm = (() => {
     } else if (name === 'skills') {
       renderSkillsSheet();
     }
+  }
+
+  function openInnovationsSheet() {
+    _activeTab = 'learner';
+    openSheet('innovations');
+  }
+
+  function openTeachersSheet() {
+    _activeTab = 'teacher';
+    openSheet('innovations');
+  }
+
+  function openYouthSheet() {
+    _activeTab = 'youth';
+    openSheet('innovations');
   }
 
   function closeSheet() {
@@ -1472,31 +1403,24 @@ const ZoneForm = (() => {
   }
 
   // ── HTML Card Builder ──────────────────────────────────────────
-  function buildParticipantCardHTML(p, isAuto, isCategoryFull = false) {
+  function buildParticipantCardHTML(p, _unused, isCategoryFull = false) {
     const isSelected = _selections.has(p.id);
     const cardClass = isSelected ? 'participant-card selected' : 'participant-card';
-    
-    let badge = '';
-    if (isAuto) {
-      badge = '<span class="card-badge badge-selected-auto">AUTO SELECTED</span>';
-    } else if (isSelected) {
-      badge = '<span class="card-badge badge-selected-manual">SELECTED</span>';
+
+    const badge = isSelected ? '<span class="card-badge badge-selected-manual">SELECTED</span>' : '';
+
+    let selectBtnHTML;
+    if (isSelected) {
+      selectBtnHTML = `<button class="btn-select selected" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
+    } else {
+      const disabledAttr = isCategoryFull ? 'disabled style="border-color:#ccc; color:#aaa; cursor:not-allowed;"' : '';
+      selectBtnHTML = `<button class="btn-select" ${disabledAttr} onclick="ZoneForm.selectParticipant('${p.id}')">SELECT</button>`;
     }
 
-    let selectBtnHTML = '';
-    if (!isAuto) {
-      if (isSelected) {
-        selectBtnHTML = `<button class="btn-select selected" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
-      } else {
-        const disabledAttr = isCategoryFull ? 'disabled style="border-color:#ccc; color:#aaa; cursor:not-allowed;"' : '';
-        selectBtnHTML = `<button class="btn-select" ${disabledAttr} onclick="ZoneForm.selectParticipant('${p.id}')">SELECT</button>`;
-      }
-    }
-
-    const titleInfo = p.title ? `<div class="p-title"><strong>Title:</strong> ${esc(p.title)}</div>` : '';
-    const detailsLine = p.learnerSubType === 'Technical Skills' 
-      ? `Sub-Skill: ${esc(p.learnerSubskill || p.subSkill || 'General')}`
-      : `Level: ${esc(p.level)} &nbsp;|&nbsp; Grade: ${esc(p.grade || '—')}`;
+    const titleInfo = p.titleOfInnovation ? `<div class="p-title"><strong>Title:</strong> ${esc(p.titleOfInnovation)}</div>` : (p.title ? `<div class="p-title"><strong>Title:</strong> ${esc(p.title)}</div>` : '');
+    const detailsLine = p.learnerSubType === 'Technical Skills'
+      ? `Sub-Skill: ${esc(p.subSkill || p.learnerSubskill || 'General')}`
+      : `Level: ${esc(p.level || '—')} &nbsp;|&nbsp; Grade: ${esc(p.grade || p.gradeForm || '—')}`;
 
     return `
       <div class="${cardClass}" id="p-card-${p.id}">
@@ -1510,89 +1434,94 @@ const ZoneForm = (() => {
   }
 
   // ── Selection Logic Toggles ────────────────────────────────────
-  function selectParticipant(id) {
+  async function selectParticipant(id) {
+    if (_submitting) return;
     const candidate = _allCandidates.find(c => c.id === id);
     if (!candidate) return;
 
-    // Apply selection rules depending on section
+    let siblingIds = [];
+
     if (isLearnerInnov(candidate)) {
-      // Learner Innovations: Select ONLY 1 per level per category
-      const siblings = _allCandidates.filter(c => 
-        isLearnerInnov(c) &&
-        c.category === candidate.category &&
-        c.level === candidate.level
-      );
-      siblings.forEach(s => _selections.delete(s.id));
-      _selections.add(id);
-
+      siblingIds = _allCandidates
+        .filter(c => isLearnerInnov(c) && c.category === candidate.category && c.level === candidate.level && c.id !== id && _selections.has(c.id))
+        .map(c => c.id);
     } else if (candidate.participantType === 'Teacher') {
-      // Teacher: Select 1 per category
-      const siblings = _allCandidates.filter(c => 
-        c.participantType === 'Teacher' &&
-        c.category === candidate.category
-      );
-      siblings.forEach(s => _selections.delete(s.id));
-      _selections.add(id);
-
+      siblingIds = _allCandidates
+        .filter(c => c.participantType === 'Teacher' && c.category === candidate.category && c.id !== id && _selections.has(c.id))
+        .map(c => c.id);
     } else if (candidate.participantType === 'Out-of-School Youth') {
-      // Youth: Select 1 per category
-      const siblings = _allCandidates.filter(c => 
-        c.participantType === 'Out-of-School Youth' &&
-        c.category === candidate.category
-      );
-      siblings.forEach(s => _selections.delete(s.id));
-      _selections.add(id);
-
+      siblingIds = _allCandidates
+        .filter(c => c.participantType === 'Out-of-School Youth' && c.category === candidate.category && c.id !== id && _selections.has(c.id))
+        .map(c => c.id);
     } else if (candidate.participantType === 'Learner' && candidate.learnerSubType === 'Academics / Quiz & Olympiads') {
-      // Academics: Select 1 per subject per level
-      const siblings = _allCandidates.filter(c => 
-        c.participantType === 'Learner' &&
-        c.learnerSubType === 'Academics / Quiz & Olympiads' &&
-        c.category === candidate.category &&
-        c.level === candidate.level
-      );
-      siblings.forEach(s => _selections.delete(s.id));
-      _selections.add(id);
-
+      siblingIds = _allCandidates
+        .filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads' && c.category === candidate.category && c.level === candidate.level && c.id !== id && _selections.has(c.id))
+        .map(c => c.id);
     } else if (candidate.participantType === 'Learner' && candidate.learnerSubType === 'Technical Skills') {
-      // Technical Skills: Allow multiple up to limit
       const limit = SKILL_LIMITS[candidate.category];
-      const siblings = _allCandidates.filter(c => 
-        c.participantType === 'Learner' &&
-        c.learnerSubType === 'Technical Skills' &&
-        c.category === candidate.category
-      );
-      const selectedSiblingsCount = siblings.filter(s => _selections.has(s.id)).length;
-      if (selectedSiblingsCount < limit) {
-        _selections.add(id);
-      } else {
-        alert(`Maximum ${limit} slots allowed for ${candidate.category}.`);
+      const currentCount = _allCandidates.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills' && c.category === candidate.category && _selections.has(c.id)).length;
+      if (currentCount >= limit) {
+        alert(`Maximum ${limit} slot${limit > 1 ? 's' : ''} allowed for ${candidate.category}.`);
         return;
       }
     }
 
-    // Refresh active details view
+    // Optimistic update
+    siblingIds.forEach(sid => _selections.delete(sid));
+    _selections.add(id);
     if (_selectedCategory) renderCategoryDetailBody();
     if (_selectedSubject) renderAcadDetailBody();
     if (_selectedSkill) renderSkillDetailBody();
-
     updateDashboardState();
+
+    // Persist to Firestore
+    try {
+      _submitting = true;
+      await Promise.all([
+        FirestoreDB.selectForDistrict(id, _auth.organiserName, _auth.zone),
+        ...siblingIds.map(sid => FirestoreDB.deselectFromDistrict(sid))
+      ]);
+    } catch (err) {
+      console.error('Selection save failed', err);
+      // Revert optimistic update
+      _selections.delete(id);
+      siblingIds.forEach(sid => _selections.add(sid));
+      if (_selectedCategory) renderCategoryDetailBody();
+      if (_selectedSubject) renderAcadDetailBody();
+      if (_selectedSkill) renderSkillDetailBody();
+      updateDashboardState();
+      alert('Failed to save selection. Check your internet connection.');
+    } finally {
+      _submitting = false;
+    }
   }
 
-  function deselectParticipant(id) {
-    _selections.delete(id);
+  async function deselectParticipant(id) {
+    if (_submitting) return;
 
-    // Refresh active details view
+    // Optimistic update
+    _selections.delete(id);
     if (_selectedCategory) renderCategoryDetailBody();
     if (_selectedSubject) renderAcadDetailBody();
     if (_selectedSkill) renderSkillDetailBody();
-
     updateDashboardState();
-
-    // Refresh summary view if active
     const summaryDrawer = document.getElementById('drawer-summary');
-    if (summaryDrawer && summaryDrawer.classList.contains('active')) {
-      renderSummaryBody();
+    if (summaryDrawer && summaryDrawer.classList.contains('active')) renderSummaryBody();
+
+    // Persist to Firestore
+    try {
+      _submitting = true;
+      await FirestoreDB.deselectFromDistrict(id);
+    } catch (err) {
+      console.error('Deselection save failed', err);
+      _selections.add(id);
+      if (_selectedCategory) renderCategoryDetailBody();
+      if (_selectedSubject) renderAcadDetailBody();
+      if (_selectedSkill) renderSkillDetailBody();
+      updateDashboardState();
+      alert('Failed to save deselection. Check your internet connection.');
+    } finally {
+      _submitting = false;
     }
   }
 
@@ -1627,18 +1556,13 @@ const ZoneForm = (() => {
     const buildListHTML = (list) => {
       if (list.length === 0) return '<div class="empty-slot-msg" style="margin:4px 0 10px 0;">No selections made yet</div>';
       return list.map(p => {
-        const isAuto = _autoSelections.has(p.id);
-        const autoBadge = isAuto 
-          ? '<span class="sum-p-type-auto">Auto-Selected</span>' 
-          : '<span class="sum-p-type-manual">Manual Selection</span>';
-        
-        const deselectBtn = isAuto ? '' : `<button class="btn-sum-deselect" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
-
-        const titleLine = p.learnerSubType === 'Technical Skills' 
-          ? `Sub-Skill: ${esc(p.learnerSubskill || p.subSkill || 'General')}`
+        const titleLine = p.learnerSubType === 'Technical Skills'
+          ? `Sub-Skill: ${esc(p.subSkill || p.learnerSubskill || 'General')}`
           : p.learnerSubType === 'Academics / Quiz & Olympiads'
-          ? `Subject: ${esc(p.category.replace('Quiz & Olympiads — ', ''))} | Level: ${esc(p.level)}`
-          : `Level: ${esc(p.level)} | Category: ${esc(p.category)}`;
+          ? `Subject: ${esc((p.category || '').replace('Quiz & Olympiads — ', ''))} | Level: ${esc(p.level)}`
+          : p.level
+          ? `Level: ${esc(p.level)} | Category: ${esc(p.category)}`
+          : `Category: ${esc(p.category)}`;
 
         return `
           <div class="summary-item">
@@ -1646,9 +1570,8 @@ const ZoneForm = (() => {
               <span class="sum-p-title">${esc(p.fullName || p.participant)}</span>
               <span style="font-size:12px; font-weight:600; color:#555;">🏫 ${esc(p.schoolName || p.school)}</span>
               <span class="sum-p-cat">${titleLine}</span>
-              ${autoBadge}
             </div>
-            ${deselectBtn}
+            <button class="btn-sum-deselect" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>
           </div>`;
       }).join('');
     };
@@ -1742,190 +1665,70 @@ const ZoneForm = (() => {
     `;
   }
 
-  // ── Confirmation Drawer ─────────────────────────────────────────
-  function openConfirmSubmit() {
-    const confirmDrawer = document.getElementById('drawer-confirm');
+  // ── Zone Records Drawer ─────────────────────────────────────────
+  function openZoneRecords() {
+    const drawer = document.getElementById('drawer-zone-records');
     const overlay = document.getElementById('sheet-overlay');
-    if (confirmDrawer) confirmDrawer.classList.add('active');
+    if (drawer) drawer.classList.add('active');
     if (overlay) overlay.classList.add('active');
-
-    renderConfirmBody();
+    renderZoneRecordsBody();
   }
 
-  function renderConfirmBody() {
-    const bodyEl = document.getElementById('confirm-body');
+  function renderZoneRecordsBody() {
+    const bodyEl = document.getElementById('zone-records-body');
     if (!bodyEl) return;
 
-    const count = _selections.size;
-    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
+    if (_allCandidates.length === 0) {
+      bodyEl.innerHTML = '<div class="empty-slot-msg" style="margin:24px 0;">No school submissions found for your zone.</div>';
+      return;
+    }
 
-    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
-    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
-    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
-    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
-    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
+    // Group by school
+    const bySchool = {};
+    _allCandidates.forEach(c => {
+      const sn = c.schoolName || c.school || 'Unknown School';
+      if (!bySchool[sn]) bySchool[sn] = [];
+      bySchool[sn].push(c);
+    });
 
-    // Empty slots calculation
-    let emptyCount = 64 - count;
+    const sections = Object.keys(bySchool).sort().map(school => {
+      const list = bySchool[school];
+      const rows = list.map(p => {
+        const selBadge = _selections.has(p.id)
+          ? '<span style="font-size:9px; font-weight:800; background:var(--db-green-light); color:var(--db-green); padding:2px 6px; border-radius:4px; margin-left:6px;">SELECTED</span>'
+          : '';
+        const sub = p.learnerSubType === 'Technical Skills' ? 'Skills'
+                  : p.learnerSubType === 'Academics / Quiz & Olympiads' ? 'Academics'
+                  : p.participantType === 'Teacher' ? 'Teacher'
+                  : p.participantType === 'Out-of-School Youth' ? 'Youth'
+                  : 'Learner';
+        return `<div style="padding:8px 12px; border-bottom:1px solid #f0f4fa; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+          <span>
+            <strong style="color:var(--db-navy);">${esc(p.fullName || p.participant)}</strong>${selBadge}<br>
+            <span style="color:#555;">${sub} &bull; ${esc(p.category || '—')}</span>
+          </span>
+        </div>`;
+      }).join('');
+
+      return `
+        <div class="collapsible-card" style="margin-bottom:10px;">
+          <div class="collapsible-trigger" style="font-size:13px;">
+            <span>🏫 ${esc(school)}</span>
+            <span style="font-size:11px; color:var(--db-gray);">${list.length} submission${list.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div style="border-top:1.5px solid #e8eef7;">${rows}</div>
+        </div>`;
+    }).join('');
+
+    const total = _allCandidates.length;
+    const selected = _selections.size;
 
     bodyEl.innerHTML = `
-      <div style="font-size:14px; line-height:1.6; color:#333; margin-bottom:16px;">
-        Are you sure you want to finalize and submit the JETS coordinator selections? 
-        This will freeze these participants as representing your zone at the District Fair.
+      <div style="background:var(--db-navy-light); padding:12px 16px; border-radius:8px; margin-bottom:16px; font-size:13px; line-height:1.6;">
+        <strong>${_auth.zone} Zone — All School Submissions</strong><br>
+        Total: <strong>${total}</strong> &nbsp;|&nbsp; Selected for District: <strong style="color:var(--db-green);">${selected}</strong>
       </div>
-      <div style="background:#f8fafe; border:1.5px solid #cbd5e1; border-radius:12px; padding:16px; margin-bottom:20px; font-family:monospace; font-size:13px; line-height:1.6;">
-        <div style="font-weight:bold; color:var(--db-navy); border-bottom:1px solid #cbd5e1; padding-bottom:6px; margin-bottom:8px; font-size:14px; font-family:inherit;">📊 Selection Roster Summary</div>
-        <div>Zone: ${_auth.zone} Zone</div>
-        <div>Coordinator: ${_auth.organiserName}</div>
-        <hr style="border:none; border-top:1px dashed #cbd5e1; margin:6px 0;">
-        <div>• Learner Innovations: ${lInnov} of 27</div>
-        <div>• Teacher Innovations: ${tInnov} of 9</div>
-        <div>• Out-of-School Youth: ${yInnov} of 9</div>
-        <div>• Academics Selection: ${acad} of 7</div>
-        <div>• Technical Skills:    ${sk} of 12</div>
-        <hr style="border:none; border-top:1px dashed #cbd5e1; margin:6px 0;">
-        <strong>TOTAL SELECTIONS: ${count} OF 64</strong><br>
-        <strong style="color:${emptyCount > 0 ? '#e67e22' : '#2ecc71'};">Empty Slots: ${emptyCount}</strong>
-      </div>
-      ${emptyCount > 0 ? `
-        <div style="font-size:11px; background:#fffdf5; border:1px solid #ffeeba; color:#856404; padding:10px; border-radius:8px; line-height:1.4; margin-bottom:20px;">
-          <strong>⚠️ Note on Empty Slots:</strong> Empty slots exist because schools in your zone submitted zero candidate entries for those categories. This is normal and fully acceptable.
-        </div>
-      ` : ''}
-      <div style="display:flex; gap:12px;">
-        <button onclick="ZoneForm.confirmAndSubmit()" id="btn-submit-final" class="db-action-btn db-action-primary" style="flex:2; padding: 14px; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
-          CONFIRM AND SUBMIT
-        </button>
-        <button onclick="ZoneForm.closeDrawer('confirm')" class="db-action-btn db-action-outline" style="flex:1; border:1.5px solid var(--db-navy); color:var(--db-navy); background:#fff; padding: 14px; font-weight:700; border-radius:8px; cursor:pointer;">
-          GO BACK
-        </button>
-      </div>
-    `;
-  }
-
-  // ── Submission write pipeline ────────────────────────────────
-  async function confirmAndSubmit() {
-    if (_submitting) return;
-    _submitting = true;
-
-    const btn = document.getElementById('btn-submit-final');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Saving selections…';
-    }
-
-    try {
-      const selectedCandidates = _allCandidates.filter(c => _selections.has(c.id));
-      const tsMs = Date.now();
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      const zoneRefCode = 'ZON-' + tsMs + '-' + rand;
-
-      // Execute dual-collection writes in parallel
-      const writes = selectedCandidates.map(async (p) => {
-        const isAuto = _autoSelections.has(p.id);
-
-        // Copy original details and add selection flags
-        const selectionData = {
-          ...p,
-          zoneRef: zoneRefCode,
-          selectionType: isAuto ? 'Auto' : 'Manual',
-          selectedBy: _auth.organiserName,
-          selectionTimestamp: new Date().toISOString(),
-          zone: _auth.zone,
-          status: 'Selected'
-        };
-
-        // 1. Write doc to zone_submissions
-        await db.collection('zone_submissions').doc(p.id).set(selectionData);
-
-        // 2. Update doc inside school_submissions
-        await db.collection('school_submissions').doc(p.id).update({
-          zoneSelected: true,
-          zoneRef: zoneRefCode
-        });
-      });
-
-      await Promise.all(writes);
-
-      closeDrawer('confirm');
-      showSuccessScreen(selectedCandidates.length, zoneRefCode);
-
-    } catch (err) {
-      console.error('Final Zonal submit pipeline transaction failed', err);
-      alert('Failed to submit selections. Please check your internet connection.');
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'CONFIRM AND SUBMIT';
-      }
-    } finally {
-      _submitting = false;
-    }
-  }
-
-  // Success screen display
-  function showSuccessScreen(total, refCode) {
-    const successPanel = document.getElementById('panel-success');
-    const successBody = document.getElementById('success-card-body');
-    if (!successPanel || !successBody) return;
-
-    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
-    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
-    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
-    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
-    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
-    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
-
-    successBody.innerHTML = `
-      <strong>Selections finalized!</strong><br>
-      Reference Code: <code>${refCode}</code><br>
-      Zone Name: ${_auth.zone} Zone<br>
-      Total Finalized: ${total} of 64 slots<br>
-      <hr style="border:none; border-top:1px dashed #cbd5e1; margin:8px 0;">
-      • Learner Innovations: ${lInnov} slots<br>
-      • Teacher Innovations: ${tInnov} slots<br>
-      • Youth Innovations: ${yInnov} slots<br>
-      • Academics Selection: ${acad} slots<br>
-      • Technical Skills: ${sk} slots
-    `;
-
-    successPanel.classList.remove('hidden');
-  }
-
-  // Prefilled WhatsApp completion report generator
-  function sendWhatsApp() {
-    const total = _selections.size;
-    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
-    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
-    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
-    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
-    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
-    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
-
-    const emptyCount = 64 - total;
-    const dateStr = new Date().toLocaleString();
-
-    const text = `*JETS 2026 — Zone Selection Complete*
-━━━━━━━━━━━━━━━━━━
-*Zone:* ${_auth.zone} Zone
-*Coordinator:* ${_auth.organiserName}
-*Date:* ${dateStr}
-
-*Total Selected:* ${total} of 64 slots
-
-• Learner Innovations: ${lInnov} selected
-• Teacher Innovations: ${tInnov} selected
-• Youth Innovations: ${yInnov} selected
-• Academics Selection: ${acad} selected
-• Technical Skills: ${sk} selected
-
-*Empty slots:* ${emptyCount} (No school submissions)
-
-Contact District JETS Organiser:
-0973375828
-━━━━━━━━━━━━━━━━━━
-Lavushimanda District JETS 2026`;
-
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+      ${sections}`;
   }
 
   // ── Global Event Bindings ─────────────────────────────────────
@@ -1942,6 +1745,9 @@ Lavushimanda District JETS 2026`;
     destroy,
     toggleInfoCard,
     openSheet,
+    openInnovationsSheet,
+    openTeachersSheet,
+    openYouthSheet,
     closeSheet,
     switchSubTab,
     showCategoryDetail,
@@ -1953,10 +1759,8 @@ Lavushimanda District JETS 2026`;
     showSkillCategoryDetail,
     closeSkillDetail,
     openSummary,
+    openZoneRecords,
     closeDrawer,
-    openConfirmSubmit,
-    confirmAndSubmit,
-    sendWhatsApp
   };
 
 })();

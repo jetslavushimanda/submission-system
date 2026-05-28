@@ -698,12 +698,22 @@ const SchoolForm = (() => {
 
     let count = 0;
     existingSubmissions.forEach(s => {
-      const matchPType = s.participantType === pType || (pType === 'Learner' && (s.participantType || '').indexOf('Learner') === 0);
+      const subType = s.learnerSubType || s.type || '';
+      let matchPType;
+      if (pType === 'Academics / Quiz & Olympiads') {
+        matchPType = s.participantType === 'Learner' && subType === 'Academics / Quiz & Olympiads';
+      } else if (pType === 'Technical Skills') {
+        matchPType = s.participantType === 'Learner' && subType === 'Technical Skills';
+      } else {
+        matchPType = s.participantType === pType || (pType === 'Learner' && (s.participantType || '').indexOf('Learner') === 0);
+      }
       const matchCat = s.category === cat;
 
       if (matchPType && matchCat) {
-        if (pType.indexOf('Academics') !== -1 || pType.indexOf('Technical Skills') !== -1) {
-          if (s.grade === lvl) count++;
+        if (pType === 'Academics / Quiz & Olympiads') {
+          if (s.level === lvl) count++;
+        } else if (pType === 'Technical Skills') {
+          count++;
         } else {
           count++;
         }

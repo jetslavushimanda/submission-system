@@ -1,16 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // firebase.js — Firebase Firestore client
 // JETS 2026 | Lavushimanda District
-//
-// Initialises the Firebase app and exposes a single `db` reference
-// plus helper functions used by school-form, zone-form, dashboard,
-// welcome-stats and history modules.
 // ═══════════════════════════════════════════════════════════════
 
-// ── Firebase SDK (loaded via CDN in index.html) ───────────────
-// Uses the compat (global) builds so all existing non-module JS
-// can access `firebase.firestore()` without any bundler.
-// ── Config ────────────────────────────────────────────────────
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyDINoYBAtoXgLF28ZE3OKEdYBODCWCg_Wc",
   authDomain:        "jets2026-lavushimanda.firebaseapp.com",
@@ -20,27 +12,21 @@ const FIREBASE_CONFIG = {
   appId:             "1:802975987082:web:2f7092c076259f2cd10473"
 };
 
-// Initialise once
 if (!firebase.apps.length) {
   firebase.initializeApp(FIREBASE_CONFIG);
 }
 
-// Firestore — core database
 const db = firebase.firestore();
 
-// Storage — optional, only needed for file uploads
 let _storage = null;
 try { _storage = firebase.storage(); } catch (_) {}
 
 // ── Collections ───────────────────────────────────────────────
 const COL_REGISTRATIONS   = 'registrations';
-const COL_SCHOOL_SUBS     = 'school_submissions';
-const COL_ZONE_SUBS       = 'zone_submissions';
+const COL_SUBS            = 'submissions';
 const COL_SETTINGS        = 'settings';
 const COL_CORRECTIONS     = 'correction_requests';
 
-// ═══════════════════════════════════════════════════════════════
-// FirestoreDB — public API used by all modules
 // ═══════════════════════════════════════════════════════════════
 const FirestoreDB = (() => {
 
@@ -60,7 +46,7 @@ const FirestoreDB = (() => {
     return { status: 'ok' };
   }
 
-  // ── Registration lookup — phone auth entry point ──────────────
+  // ── Registration lookup ──────────────────────────────────────
   async function getRegistration(phone) {
     try {
       const snap = await db.collection(COL_REGISTRATIONS)
@@ -71,20 +57,15 @@ const FirestoreDB = (() => {
         const d = snap.docs[0].data();
         return { found: true, ...d };
       }
-      // Not found — gather debug info
       const testSnap = await db.collection(COL_REGISTRATIONS).limit(1).get();
-      return {
-        found:       false,
-        collectionSize: testSnap.size,
-        searched:    phone.trim(),
-      };
+      return { found: false, collectionSize: testSnap.size, searched: phone.trim() };
     } catch (e) {
       console.warn('getRegistration failed', e);
       return { found: false, dbError: e.message || String(e) };
     }
   }
 
-  // ── File upload to Firebase Storage ───────────────────────────
+  // ── File upload ──────────────────────────────────────────────
   async function uploadFile(base64, fileName, mimeType, phone) {
     if (_storage) {
       try {
@@ -111,8 +92,8 @@ const FirestoreDB = (() => {
   async function getSchoolCount(phone, schoolName) {
     try {
       const [snap1, snap2] = await Promise.all([
-        db.collection(COL_SCHOOL_SUBS).where('schoolName', '==', schoolName).get(),
-        db.collection(COL_SCHOOL_SUBS).where('school',     '==', schoolName).get(),
+        db.collection(COL_SUBS).where('schoolName', '==', schoolName).get(),
+        db.collection(COL_SUBS).where('school',     '==', schoolName).get(),
       ]);
       const seen = new Set();
       const docs = [];
@@ -122,16 +103,16 @@ const FirestoreDB = (() => {
     return { status: 'ok', total: 0, innovations: 0, academics: 0, skills: 0 };
   }
 
-  // ── All zone data in one query (for fast zone-form load) ──────
+  // ── All zone data (school submissions in a zone) ───────────────
   async function getZoneAllData(phone, zone) {
     try {
-      const snap = await db.collection(COL_ZONE_SUBS).where('zone', '==', zone).get();
+      const snap = await db.collection(COL_SUBS).where('zone', '==', zone).get();
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       docs.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
 
       _zoneHistoryCache = docs;
 
-      const schoolSet = new Set(docs.map(d => d.participantSchool || d.schoolName || d.school).filter(Boolean));
+      const schoolSet = new Set(docs.map(d => d.schoolName || d.school).filter(Boolean));
 
       const innovations            = { learner: {}, teacher: {}, youth: {} };
       const academicsBySubjectLevel = {};
@@ -175,25 +156,25 @@ const FirestoreDB = (() => {
     }
   }
 
-  // ── Submission count for a zone ───────────────────────────────
+  // ── Zone count: total submissions + selections ─────────────────
   async function getZoneCount(phone, zone) {
     try {
-      const snap = await db.collection(COL_ZONE_SUBS)
-        .where('zone', '==', zone)
-        .get();
+      const snap = await db.collection(COL_SUBS).where('zone', '==', zone).get();
       const docs = snap.docs.map(d => d.data());
-      const schoolSet = new Set(docs.map(d => d.participantSchool || d.schoolName || d.school).filter(Boolean));
+      const schoolSet = new Set(docs.map(d => d.schoolName || d.school).filter(Boolean));
+      const selected = docs.filter(d => d.selectedForDistrict === true).length;
       return {
         status: 'ok',
         total: docs.length,
+        selected,
         ..._catCounts(docs),
         submittedSchools: [...schoolSet]
       };
     } catch (e) { console.warn('getZoneCount failed', e); }
-    return { status: 'ok', total: 0, innovations: 0, academics: 0, skills: 0, submittedSchools: [] };
+    return { status: 'ok', total: 0, selected: 0, innovations: 0, academics: 0, skills: 0, submittedSchools: [] };
   }
 
-  // ── Welcome stats (used by welcome-stats.js) ──────────────────
+  // ── Welcome stats ─────────────────────────────────────────────
   async function getWelcomeStats(phone, role, zone, schoolName) {
     if (role === 'School') {
       const r = await getSchoolCount(phone, schoolName);
@@ -206,20 +187,19 @@ const FirestoreDB = (() => {
     return { status: 'ok', role };
   }
 
-  // ── Submission history for a school ───────────────────────────
+  // ── Submission history ────────────────────────────────────────
   async function getSubmissionHistory(phone, source, zone, schoolName) {
     if (source === 'zone' && _zoneHistoryCache !== null) {
       return { status: 'ok', rows: _zoneHistoryCache };
     }
     try {
-      const col = source === 'zone' ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
       let snaps;
       if (source === 'zone') {
-        snaps = [await db.collection(col).where('zone', '==', zone).get()];
+        snaps = [await db.collection(COL_SUBS).where('zone', '==', zone).get()];
       } else {
         snaps = await Promise.all([
-          db.collection(col).where('schoolName', '==', schoolName).get(),
-          db.collection(col).where('school',     '==', schoolName).get(),
+          db.collection(COL_SUBS).where('schoolName', '==', schoolName).get(),
+          db.collection(COL_SUBS).where('school',     '==', schoolName).get(),
         ]);
       }
       const seen = new Set();
@@ -229,22 +209,16 @@ const FirestoreDB = (() => {
       }));
       rows.sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1);
 
-      // Join correction requests to populate correctionStatus persistently across sessions
       try {
         const corrSnap = await db.collection(COL_CORRECTIONS).get();
         const corrMap = {};
         corrSnap.forEach(d => {
           const c = d.data();
-          if (c.refNumber) {
-            corrMap[c.refNumber] = { status: c.status, id: d.id };
-          }
+          if (c.refNumber) corrMap[c.refNumber] = { status: c.status, id: d.id };
         });
         rows.forEach(r => {
           const corr = corrMap[r.ref || r.id];
-          if (corr) {
-            r.correctionStatus = corr.status;
-            r.correctionRequestId = corr.id;
-          }
+          if (corr) { r.correctionStatus = corr.status; r.correctionRequestId = corr.id; }
         });
       } catch (ce) {
         console.warn('Joining correction requests failed', ce);
@@ -255,7 +229,7 @@ const FirestoreDB = (() => {
     return { status: 'ok', rows: [] };
   }
 
-  // ── Progress data (slot counts by category) ───────────────────
+  // ── Progress data ─────────────────────────────────────────────
   async function getProgressData(phone, source, zone, schoolName) {
     const hist = await getSubmissionHistory(phone, source, zone, schoolName);
     const rows = hist.rows || [];
@@ -269,7 +243,6 @@ const FirestoreDB = (() => {
       const subType = r.learnerSubType  || '';
       const cat     = r.category        || '';
       const lvl     = r.level           || '';
-
       if (pType === 'Teacher') {
         innovations.teacher[cat] = (innovations.teacher[cat] || 0) + 1;
       } else if (pType === 'Out-of-School Youth') {
@@ -299,41 +272,47 @@ const FirestoreDB = (() => {
 
       payload.timestamp = new Date().toISOString();
       payload.ref = refNumber;
+      payload.selectedForDistrict = false;
 
-      await db.collection(COL_SCHOOL_SUBS).doc(refNumber).set(payload);
-      return { status: 'ok', refNumber: refNumber };
+      await db.collection(COL_SUBS).doc(refNumber).set(payload);
+      return { status: 'ok', refNumber };
     } catch (e) {
       console.error('submitSchool failed', e);
       throw e;
     }
   }
 
-  // ── Add a zone submission ─────────────────────────────────────
-  async function submitZone(payload) {
+  // ── Zone selection: mark a submission as selected ─────────────
+  async function selectForDistrict(docId, coordinatorName, zone) {
     try {
-      const tsMs = Date.now();
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      const refNumber = 'ZN-' + tsMs + '-' + rand;
-
-      payload.timestamp = new Date().toISOString();
-      payload.ref = refNumber;
-
-      await db.collection(COL_ZONE_SUBS).doc(refNumber).set(payload);
-
-      // Update local history cache
-      const localSub = { id: refNumber, ref: refNumber, ...payload };
-      if (_zoneHistoryCache) {
-        _zoneHistoryCache.unshift(localSub);
-      }
-
-      return { status: 'ok', refNumber: refNumber };
+      await db.collection(COL_SUBS).doc(docId).update({
+        selectedForDistrict: true,
+        selectedBy:          coordinatorName,
+        selectedAt:          new Date().toISOString(),
+      });
+      return { status: 'ok' };
     } catch (e) {
-      console.error('submitZone failed', e);
+      console.error('selectForDistrict failed', e);
       throw e;
     }
   }
 
-  // ── Submit a correction request ───────────────────────────────
+  // ── Zone deselection: unmark a submission ─────────────────────
+  async function deselectFromDistrict(docId) {
+    try {
+      await db.collection(COL_SUBS).doc(docId).update({
+        selectedForDistrict: false,
+        selectedBy:          null,
+        selectedAt:          null,
+      });
+      return { status: 'ok' };
+    } catch (e) {
+      console.error('deselectFromDistrict failed', e);
+      throw e;
+    }
+  }
+
+  // ── Correction request ────────────────────────────────────────
   async function submitCorrectionRequest(payload) {
     try {
       payload.submittedAt = new Date().toISOString();
@@ -349,17 +328,18 @@ const FirestoreDB = (() => {
   // ── Full dashboard data ───────────────────────────────────────
   async function getFullDashboard() {
     try {
-      const [regSnap, s2Snap, s3Snap, settSnap, corrSnap] = await Promise.all([
+      const [regSnap, subsSnap, settSnap, corrSnap] = await Promise.all([
         db.collection(COL_REGISTRATIONS).get(),
-        db.collection(COL_SCHOOL_SUBS).get(),
-        db.collection(COL_ZONE_SUBS).get(),
+        db.collection(COL_SUBS).get(),
         db.collection(COL_SETTINGS).doc('deadlines').get(),
         db.collection(COL_CORRECTIONS).get(),
       ]);
 
-      const reg = regSnap.docs.map(d => d.data());
-      const s2  = s2Snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const s3  = s3Snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const reg  = regSnap.docs.map(d => d.data());
+      const subs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Zone selections: submissions marked selectedForDistrict = true
+      const zoneSels = subs.filter(s => s.selectedForDistrict === true);
 
       const schoolReg = {};
       const coordReg  = {};
@@ -378,15 +358,11 @@ const FirestoreDB = (() => {
       const schoolSubCounts = {};
       const schoolsStarted  = {};
 
-      s2.forEach(r => {
+      subs.forEach(r => {
         const ts  = r.timestamp || '';
         const sch = (r.schoolName || r.school || '').trim();
         if (ts && ts.slice(0, 10) === todayStr) todayCount++;
         if (sch) { schoolSubCounts[sch] = (schoolSubCounts[sch] || 0) + 1; schoolsStarted[sch] = true; }
-      });
-      s3.forEach(r => {
-        const ts = r.timestamp || '';
-        if (ts && ts.slice(0, 10) === todayStr) todayCount++;
       });
 
       const regNames       = Object.keys(schoolReg);
@@ -395,25 +371,27 @@ const FirestoreDB = (() => {
       regNames.forEach(n => { if (schoolsStarted[n]) schoolsSubmitted++; });
 
       const ZONE_NAMES = ['Mpumba', 'Chiundaponde', 'Lukulu', 'Kalonje', 'Mwelushi'];
-      const zoneSubMap = {};
-      ZONE_NAMES.forEach(z => { zoneSubMap[z] = { cnt: 0, schools: {} }; });
 
-      s3.forEach(r => {
+      // Zone selection progress (based on selectedForDistrict)
+      const zoneSelMap = {};
+      ZONE_NAMES.forEach(z => { zoneSelMap[z] = { cnt: 0, schools: {} }; });
+      zoneSels.forEach(r => {
         const zn  = (r.zone || '').trim();
-        const sch = (r.participantSchool || r.schoolName || r.school || '').trim();
-        if (zoneSubMap[zn]) {
-          zoneSubMap[zn].cnt++;
-          if (sch) zoneSubMap[zn].schools[sch] = (zoneSubMap[zn].schools[sch] || 0) + 1;
+        const sch = (r.schoolName || r.school || '').trim();
+        if (zoneSelMap[zn]) {
+          zoneSelMap[zn].cnt++;
+          if (sch) zoneSelMap[zn].schools[sch] = (zoneSelMap[zn].schools[sch] || 0) + 1;
         }
       });
 
       const zones = ZONE_NAMES.map(zn => {
-        const zd    = zoneSubMap[zn];
+        const zd    = zoneSelMap[zn];
         const coord = coordReg[zn] || { name: '', phone: '' };
         const submitted = zd.cnt;
         const pct    = Math.min(100, Math.round((submitted / 64) * 100));
         const status = submitted === 0 ? 'Not Started' : submitted >= 64 ? 'Complete' : 'In Progress';
 
+        // Per-school stats within zone
         const zSchools = {};
         Object.keys(zd.schools).forEach(sn => {
           zSchools[sn] = { zoneCount: zd.schools[sn], schoolCount: schoolSubCounts[sn] || 0 };
@@ -425,7 +403,7 @@ const FirestoreDB = (() => {
         });
         const schoolsArr = Object.entries(zSchools).map(([sn, v]) => {
           const inf = schoolReg[sn] || { type: '' };
-          return { name: sn, type: inf.type || '', schoolCount: v.schoolCount, zoneCount: v.zoneCount, submitted: v.schoolCount + v.zoneCount };
+          return { name: sn, type: inf.type || '', schoolCount: v.schoolCount, zoneCount: v.zoneCount, submitted: v.schoolCount };
         }).sort((a, b) => a.name < b.name ? -1 : 1);
 
         return { name: zn, coordinator: coord.name, phone: coord.phone, submitted, max: 64, pct, status, schools: schoolsArr };
@@ -437,10 +415,17 @@ const FirestoreDB = (() => {
         return { name: sn, zone: info.zone, type: info.type, submitted: sc, hasStarted: sc > 0 };
       }).sort((a, b) => a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : a.name < b.name ? -1 : 1);
 
-      const allSubs = [
-        ...s2.map(r => ({ time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || r.id })),
-        ...s3.map(r => ({ time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || r.id })),
-      ].sort((a, b) => b.time < a.time ? -1 : 1);
+      const allSubs = subs.map(r => ({
+        time:               r.timestamp || '',
+        source:             r.selectedForDistrict ? 'Selected' : 'School',
+        zone:               r.zone || '',
+        school:             r.schoolName || r.school || '',
+        participant:        r.fullName || r.participant || '',
+        learnerSubType:     r.learnerSubType || r.type || '',
+        category:           r.category || '',
+        ref:                r.ref || r.id,
+        selectedForDistrict: !!r.selectedForDistrict,
+      })).sort((a, b) => b.time < a.time ? -1 : 1);
 
       const coverage = {};
       ZONE_NAMES.forEach(z => { coverage[z] = {}; });
@@ -479,7 +464,8 @@ const FirestoreDB = (() => {
         status:   'ok',
         cachedAt: new Date().toISOString(),
         overview: {
-          totalSubmissions:  s2.length + s3.length,
+          totalSubmissions:  subs.length,
+          zoneSelections:    zoneSels.length,
           schoolsSubmitted,
           schoolsTotal,
           schoolsNotStarted: Math.max(0, schoolsTotal - schoolsSubmitted),
@@ -500,17 +486,23 @@ const FirestoreDB = (() => {
     }
   }
 
-  // ── Recent feed only (lightweight refresh) ────────────────────
+  // ── Recent feed ───────────────────────────────────────────────
   async function getRecentFeed() {
     try {
-      const [s2, s3] = await Promise.all([
-        db.collection(COL_SCHOOL_SUBS).orderBy('timestamp', 'desc').limit(50).get(),
-        db.collection(COL_ZONE_SUBS).orderBy('timestamp', 'desc').limit(50).get(),
-      ]);
-      const feed = [
-        ...s2.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'School', zone: r.zone || '', school: r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
-        ...s3.docs.map(d => { const r = d.data(); return { time: r.timestamp || '', source: 'Zone',   zone: r.zone || '', school: r.participantSchool || r.schoolName || r.school || '', participant: r.fullName || r.participant || '', learnerSubType: r.learnerSubType || r.type || '', category: r.category || '', ref: r.ref || d.id }; }),
-      ].sort((a, b) => b.time < a.time ? -1 : 1);
+      const snap = await db.collection(COL_SUBS).orderBy('timestamp', 'desc').limit(50).get();
+      const feed = snap.docs.map(d => {
+        const r = d.data();
+        return {
+          time:           r.timestamp || '',
+          source:         r.selectedForDistrict ? 'Selected' : 'School',
+          zone:           r.zone || '',
+          school:         r.schoolName || r.school || '',
+          participant:    r.fullName || r.participant || '',
+          learnerSubType: r.learnerSubType || r.type || '',
+          category:       r.category || '',
+          ref:            r.ref || d.id
+        };
+      }).sort((a, b) => b.time < a.time ? -1 : 1);
       return { status: 'ok', recentFeed: feed.slice(0, 20) };
     } catch (e) {
       console.warn('getRecentFeed failed', e);
@@ -527,22 +519,19 @@ const FirestoreDB = (() => {
     } catch (e) { console.error('adminGetAllOrganisers failed', e); throw e; }
   }
 
-  // ── Admin: toggle active/inactive status ──────────────────────
+  // ── Admin: toggle status ──────────────────────────────────────
   async function adminToggleStatus(targetPhone, newStatus) {
     try {
       const snap = await db.collection(COL_REGISTRATIONS)
         .where('phone', '==', targetPhone).limit(1).get();
-      if (!snap.empty) {
-        await snap.docs[0].ref.update({ status: newStatus });
-      }
+      if (!snap.empty) await snap.docs[0].ref.update({ status: newStatus });
       return { status: 'ok' };
     } catch (e) { console.error('adminToggleStatus failed', e); throw e; }
   }
 
   // ── Admin: delete a submission by ref ────────────────────────
   async function deleteSubmission(ref) {
-    const col = ref.startsWith('ZN-') ? COL_ZONE_SUBS : COL_SCHOOL_SUBS;
-    const snap = await db.collection(col).where('ref', '==', ref).limit(1).get();
+    const snap = await db.collection(COL_SUBS).where('ref', '==', ref).limit(1).get();
     if (snap.empty) throw new Error('Submission not found: ' + ref);
     await snap.docs[0].ref.delete();
     return { status: 'ok' };
@@ -553,9 +542,7 @@ const FirestoreDB = (() => {
     try {
       const snap = await db.collection(COL_REGISTRATIONS)
         .where('phone', '==', targetPhone).limit(1).get();
-      if (!snap.empty) {
-        await snap.docs[0].ref.delete();
-      }
+      if (!snap.empty) await snap.docs[0].ref.delete();
       return { status: 'ok' };
     } catch (e) { console.error('adminDeleteOrganiser failed', e); throw e; }
   }
@@ -574,11 +561,9 @@ const FirestoreDB = (() => {
     try {
       const docId = payload.phone.trim();
       const origDocId = origPhone.trim();
-
       if (origDocId !== docId) {
         await db.collection(COL_REGISTRATIONS).doc(origDocId).delete();
       }
-
       await db.collection(COL_REGISTRATIONS).doc(docId).set(payload);
       return { status: 'ok' };
     } catch (e) { console.error('adminUpdateOrganiser failed', e); throw e; }
@@ -588,9 +573,9 @@ const FirestoreDB = (() => {
   async function handleCorrectionDecision(correctionId, decision, note) {
     try {
       await db.collection(COL_CORRECTIONS).doc(correctionId).update({
-        status:     decision,
-        adminNote:  note || '',
-        decidedAt:  new Date().toISOString(),
+        status:    decision,
+        adminNote: note || '',
+        decidedAt: new Date().toISOString(),
       });
       return { status: 'ok' };
     } catch (e) { console.error('handleCorrectionDecision failed', e); throw e; }
@@ -608,7 +593,8 @@ const FirestoreDB = (() => {
     getSubmissionHistory,
     getProgressData,
     submitSchool,
-    submitZone,
+    selectForDistrict,
+    deselectFromDistrict,
     submitCorrectionRequest,
     getFullDashboard,
     getRecentFeed,
