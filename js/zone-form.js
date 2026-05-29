@@ -4,11 +4,11 @@
 const ZoneForm = (() => {
 
   let _pageId, _auth, _submitting = false;
-  let _unsubscribe = null;
-
+  
   // State variables
   let _allCandidates = [];       // Array of all school submissions in zone
-  let _selections = new Set();    // Set of selected candidate IDs (persisted in Firestore)
+  let _selections = new Set();    // Set of selected candidate IDs
+  let _autoSelections = new Set(); // Set of auto-selected candidate IDs
   let _activeSheet = null;
   let _activeTab = 'learner';      // 'learner' | 'teacher' | 'youth'
   
@@ -53,66 +53,6 @@ const ZoneForm = (() => {
 
   const SKILL_CATEGORIES = Object.keys(SKILL_LIMITS);
 
-  // ── Navigation Stack Routing Manager ───────────────────────────
-  const Nav = {
-    stack: [],
-    
-    push(viewName, onOpen, onClose) {
-      this.stack.push({ name: viewName, close: onClose });
-      onOpen();
-      this.updateUI();
-    },
-    
-    pop() {
-      if (this.stack.length === 0) {
-        App.backToLanding();
-        return;
-      }
-      const top = this.stack.pop();
-      if (top && top.close) {
-        top.close();
-      }
-      this.updateUI();
-    },
-    
-    clear() {
-      while (this.stack.length > 0) {
-        const top = this.stack.pop();
-        if (top && top.close) top.close();
-      }
-      this.updateUI();
-    },
-    
-    updateUI() {
-      const overlay = document.getElementById('sheet-overlay');
-      if (overlay) {
-        overlay.classList.toggle('active', this.stack.length > 0);
-      }
-      document.body.style.overflow = this.stack.length > 0 ? 'hidden' : '';
-      
-      // Dynamically adjust z-index of sheets based on stack order
-      this.stack.forEach((view, index) => {
-        const elName = this.getElementName(view.name);
-        const el = document.getElementById(elName);
-        if (el) {
-          el.style.zIndex = 1000 + index;
-        }
-      });
-    },
-    
-    getElementName(viewName) {
-      if (viewName === 'learner-innovations' || viewName === 'teacher-innovations' || viewName === 'youth-innovations') return 'sheet-innovations';
-      if (viewName === 'category-detail') return 'sheet-category-detail';
-      if (viewName === 'academics') return 'sheet-academics';
-      if (viewName === 'acad-detail') return 'sheet-acad-detail';
-      if (viewName === 'skills') return 'sheet-skills';
-      if (viewName === 'skill-detail') return 'sheet-skill-detail';
-      if (viewName === 'summary') return 'drawer-summary';
-      if (viewName === 'zone-records') return 'drawer-zone-records';
-      return '';
-    }
-  };
-
   function isLearnerInnov(c) {
     if (!c || c.participantType !== 'Learner') return false;
     const sub = c.learnerSubType || '';
@@ -124,46 +64,20 @@ const ZoneForm = (() => {
     _pageId = pageId;
     _auth = auth;
     _submitting = false;
-    _selections = new Set();
+    _selections.clear();
+    _autoSelections.clear();
     _activeSheet = null;
     _activeTab = 'learner';
     _selectedCategory = null;
     _selectedSubject = null;
     _selectedSkill = null;
-    Nav.clear(); // Initialize clean navigation stack
 
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
-
-    // 1. Instant Cache Loading (Zero Firestore wait on Portal Open)
-    const cached = localStorage.getItem(`jets_zone_cache_${auth.zone}`);
-    if (cached) {
-      try {
-        const cacheData = JSON.parse(cached);
-        if (cacheData && Array.isArray(cacheData.candidates)) {
-          _allCandidates = cacheData.candidates.map(c => _normalise(c));
-          _selections = new Set(cacheData.selections || []);
-          
-          // Render the main dashboard instantly!
-          const spinner = document.getElementById('zf-initial-loading');
-          if (spinner) spinner.classList.add('hidden');
-          const content = document.getElementById('zf-main-content');
-          if (content) content.classList.remove('hidden');
-          
-          updateDashboardState();
-        }
-      } catch (e) {
-        console.warn('Failed to parse zone cache', e);
-      }
-    }
-
-    // 2. Fresh Fetch in background (silent sync and real-time bind)
     loadAllZoneData();
   }
 
-  function destroy() {
-    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
-  }
+  function destroy() {}
 
   // ── Full Page HTML ────────────────────────────────────────────
   function buildHTML() {
@@ -172,7 +86,6 @@ const ZoneForm = (() => {
 <style>
   :root {
     --db-navy: #1a3c6e;
-    --db-navy-dark: #0d2347;
     --db-navy-light: #f0f4fa;
     --db-orange: #e67e22;
     --db-orange-light: #fdf5ee;
@@ -293,7 +206,7 @@ const ZoneForm = (() => {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 100px;
+    min-height: 96px;
     padding: 12px;
     background: #fff;
     border: 1.5px solid #e8eef7;
@@ -313,11 +226,9 @@ const ZoneForm = (() => {
     transition: color 0.25s ease;
   }
   .selection-btn-title {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--db-navy);
-    text-align: center;
-    line-height: 1.2;
   }
   .selection-btn-badge {
     font-size: 11px;
@@ -402,28 +313,6 @@ const ZoneForm = (() => {
   .btn-close-sheet:active {
     transform: scale(0.92);
   }
-  .btn-sheet-back-header {
-    background: rgba(255, 255, 255, 0.15);
-    border: none;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-  .btn-sheet-back-header:hover {
-    background: rgba(255, 255, 255, 0.3);
-  }
-  .btn-sheet-back-header:active {
-    transform: scale(0.95);
-  }
-
   .sheet-body {
     flex: 1;
     overflow-y: auto;
@@ -431,7 +320,55 @@ const ZoneForm = (() => {
     background: #f8fafe;
   }
 
-  /* Category card filled states */
+  .sheet-back-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .btn-sheet-back {
+    background: none;
+    border: none;
+    color: var(--db-navy);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .btn-sheet-back:active { background: #eaeded; }
+
+  /* Subtabs */
+  .sheet-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    background: #eaeded;
+    padding: 4px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .sheet-tab-btn {
+    border: none;
+    background: none;
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #555;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .sheet-tab-btn.active {
+    background: #fff;
+    color: var(--db-navy);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+  }
+
+  /* List & Category Buttons */
   .category-list {
     display: flex;
     flex-direction: column;
@@ -447,25 +384,9 @@ const ZoneForm = (() => {
     align-items: center;
     cursor: pointer;
     text-align: left;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   .category-btn:active { transform: scale(0.99); }
-  .category-btn.filled {
-    background: var(--db-green-light);
-    border-color: var(--db-green);
-  }
-  .category-btn.available {
-    background: var(--db-orange-light);
-    border-color: var(--db-orange);
-  }
-  .category-btn.empty {
-    background: #fdf2f2;
-    border-color: #f5c6cb;
-    opacity: 0.85;
-  }
-  .category-btn.empty .category-name {
-    color: #721c24;
-  }
   .category-name {
     font-size: 13.5px;
     font-weight: 700;
@@ -521,6 +442,7 @@ const ZoneForm = (() => {
     letter-spacing: 0.3px;
   }
   .badge-selected-manual { background: var(--db-green); color: #fff; }
+  .badge-selected-auto { background: #27ae60; color: #fff; }
 
   .p-name {
     font-size: 15px;
@@ -605,18 +527,18 @@ const ZoneForm = (() => {
     display: block;
   }
 
-  /* Selection Summary circular slot placeholders */
+  /* Drawer Summary list styling */
   .summary-sec {
     margin-bottom: 18px;
   }
   .summary-sec-title {
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 800;
     color: var(--db-navy);
     letter-spacing: 0.5px;
     text-transform: uppercase;
     background: var(--db-navy-light);
-    padding: 8px 12px;
+    padding: 6px 12px;
     border-radius: 6px;
     margin-bottom: 8px;
   }
@@ -626,8 +548,8 @@ const ZoneForm = (() => {
     align-items: center;
     padding: 10px 12px;
     background: #fff;
-    border: 1.5px solid #e8eef7;
-    border-radius: var(--radius-md);
+    border: 1px solid #e8eef7;
+    border-radius: 6px;
     margin-bottom: 6px;
   }
   .sum-p-info {
@@ -639,39 +561,10 @@ const ZoneForm = (() => {
   }
   .sum-p-title { font-size: 13.5px; font-weight: 700; color: #2c3e50; }
   .sum-p-cat { font-size: 11px; font-weight: 600; color: #7f8c8d; }
-
-  .empty-slot-placeholder {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    background: #fff;
-    border: 1.5px dashed #cbd5e1;
-    border-radius: var(--radius-md);
-    margin-bottom: 8px;
-    color: #64748b;
-  }
-  .placeholder-circle {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 1.5px dashed #94a3b8;
-    background: #f1f5f9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 800;
-    color: #475569;
-    flex-shrink: 0;
-  }
-  .placeholder-label {
-    font-size: 12px;
-    font-weight: 600;
-  }
-
+  .sum-p-type-auto { font-size: 9px; font-weight: 700; background: var(--db-green-light); color: var(--db-green); padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
+  .sum-p-type-manual { font-size: 9px; font-weight: 700; background: #e8f4fd; color: #3498db; padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
   .btn-sum-deselect {
-    border: 1.5px solid #c0392b;
+    border: 1px solid #c0392b;
     background: none;
     color: #c0392b;
     font-size: 11px;
@@ -681,6 +574,31 @@ const ZoneForm = (() => {
     cursor: pointer;
   }
   .btn-sum-deselect:active { transform: scale(0.96); }
+
+  .empty-slots-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #7f8c8d;
+    text-transform: uppercase;
+    background: #eaeded;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+  .empty-slots-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .empty-slot-item {
+    font-size: 11.5px;
+    color: #7f8c8d;
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
 
   .summary-tot-card {
     background: var(--db-navy-light);
@@ -692,37 +610,45 @@ const ZoneForm = (() => {
     line-height: 1.6;
   }
 
-  /* Completion banner WhatsApp trigger */
-  .completion-banner {
-    background: #d4edda;
-    border: 1.5px solid #c3e6cb;
-    color: #155724;
-    padding: 16px;
-    border-radius: var(--radius-md);
-    margin-bottom: 18px;
+  /* Success page styling */
+  .success-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
     text-align: center;
   }
-  .completion-title {
+  .success-icon {
+    font-size: 64px;
+    color: var(--db-green);
+    margin-bottom: 16px;
+  }
+  .success-title {
+    font-size: 22px;
     font-weight: 800;
-    font-size: 16px;
-    margin-bottom: 6px;
+    color: var(--db-navy);
+    margin-bottom: 12px;
   }
-  .btn-whatsapp-complete {
-    background: #25d366;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-weight: 700;
-    font-size: 13.5px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-    text-decoration: none;
+  .success-card {
+    background: #f8fafe;
+    border: 1.5px solid #e2e8f0;
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 24px;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.6;
   }
-  .btn-whatsapp-complete:active { transform: scale(0.96); }
 </style>
 
 <!-- Initial Loading Screen -->
@@ -738,7 +664,6 @@ const ZoneForm = (() => {
   <div class="form-topbar" style="background: linear-gradient(135deg, #0d2347, #1a3c6e);">
     <button class="btn-back" onclick="App.backToLanding()">&#8592; Back</button>
     <span class="topbar-title">Zone Selection Portal</span>
-    <button class="btn-refresh-portal" onclick="ZoneForm.forceRefresh()" style="background: rgba(255,255,255,0.1); border:none; color:#fff; padding:6px 12px; border-radius:6px; font-weight:600; cursor:pointer; font-size:12px; margin-right:8px;">Sync 🔄</button>
     <button class="btn-signout-form" onclick="App.signOut()">Sign Out</button>
   </div>
 
@@ -782,63 +707,62 @@ const ZoneForm = (() => {
       <div class="progress-note" id="main-progress-note">Select participants to fill the district fair roster.</div>
     </div>
 
-    <!-- Grid Buttons Layout (7 Distinct Options) -->
+    <!-- Grid Buttons Layout -->
     <div class="selection-grid">
-      <button class="selection-btn" onclick="ZoneForm.openLearnerInnovations()">
-        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5zM9 7a3 3 0 0 1 6 0v3H9z"/></svg></span>
-        <span class="selection-btn-title">LEARNER INNOVATIONS</span>
+      <button class="selection-btn" onclick="ZoneForm.openSheet('innovations')">
+        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6L15 17H9l-.7-2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/></svg></span>
+        <span class="selection-btn-title">INNOVATIONS</span>
         <span class="selection-btn-badge badge-empty" id="badge-innovations">0/27</span>
       </button>
 
-      <button class="selection-btn" onclick="ZoneForm.openTeacherInnovations()">
-        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        <span class="selection-btn-title">TEACHER INNOVATIONS</span>
-        <span class="selection-btn-badge badge-empty" id="badge-teachers">0/9</span>
-      </button>
-
-      <button class="selection-btn" onclick="ZoneForm.openYouthInnovations()">
-        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
-        <span class="selection-btn-title">YOUTH INNOVATIONS</span>
-        <span class="selection-btn-badge badge-empty" id="badge-youth">0/9</span>
-      </button>
-
-      <button class="selection-btn" onclick="ZoneForm.openAcademics()">
+      <button class="selection-btn" onclick="ZoneForm.openSheet('academics')">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
         <span class="selection-btn-title">ACADEMICS</span>
         <span class="selection-btn-badge badge-empty" id="badge-academics">0/7</span>
       </button>
 
-      <button class="selection-btn" onclick="ZoneForm.openSkills()">
+      <button class="selection-btn" onclick="ZoneForm.openSheet('skills')">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
         <span class="selection-btn-title">SKILLS</span>
         <span class="selection-btn-badge badge-empty" id="badge-skills">0/12</span>
       </button>
 
+      <button class="selection-btn" onclick="ZoneForm.openSheet('teachers')">
+        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="selection-btn-title">TEACHERS</span>
+        <span class="selection-btn-badge badge-empty" id="badge-teachers">0/9</span>
+      </button>
+
+      <button class="selection-btn" onclick="ZoneForm.openSheet('youth')">
+        <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg></span>
+        <span class="selection-btn-title">YOUTH</span>
+        <span class="selection-btn-badge badge-empty" id="badge-youth">0/9</span>
+      </button>
+
       <button class="selection-btn" onclick="ZoneForm.openSummary()">
         <span class="selection-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
-        <span class="selection-btn-title">SELECTED PARTICIPANTS</span>
+        <span class="selection-btn-title">SUMMARY</span>
         <span class="selection-btn-badge badge-empty" id="badge-summary" style="background:#f0f4fa; color:var(--db-navy);">VIEW</span>
       </button>
 
-      <button class="selection-btn selection-btn-full" onclick="ZoneForm.openZoneRecords()">
-        <span class="selection-btn-title">ZONE RECORDS</span>
+      <button class="selection-btn selection-btn-full" onclick="ZoneForm.openConfirmSubmit()">
+        <span class="selection-btn-title" id="submit-btn-label">SUBMIT 0 OF 64 SELECTIONS</span>
       </button>
     </div>
   </div>
 </div>
 
 <!-- Backdrop sheet overlay -->
-<div id="sheet-overlay" class="sheet-overlay" onclick="ZoneForm.back()"></div>
+<div id="sheet-overlay" class="sheet-overlay" onclick="ZoneForm.closeSheet()"></div>
 
 <!-- Slide Sheet: Innovations -->
 <div id="sheet-innovations" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title">Innovations Selection</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeSheet()">&times;</button>
   </div>
   <div class="sheet-body">
-    <div class="sheet-tabs" style="display: none;">
+    <div class="sheet-tabs">
       <button class="sheet-tab-btn active" id="tab-learner" onclick="ZoneForm.switchSubTab('learner')">Learner</button>
       <button class="sheet-tab-btn" id="tab-teacher" onclick="ZoneForm.switchSubTab('teacher')">Teacher</button>
       <button class="sheet-tab-btn" id="tab-youth" onclick="ZoneForm.switchSubTab('youth')">Youth</button>
@@ -850,9 +774,11 @@ const ZoneForm = (() => {
 <!-- Slide Sheet: Category Detail / Selection Cards -->
 <div id="sheet-category-detail" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title" id="cat-detail-title">Category Title</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeCategoryDetail()">&times;</button>
+  </div>
+  <div class="sheet-back-bar">
+    <button class="btn-sheet-back" onclick="ZoneForm.closeCategoryDetail()">&#8592; Back to Innovations</button>
   </div>
   <div class="sheet-body" id="cat-detail-body">
   </div>
@@ -861,9 +787,8 @@ const ZoneForm = (() => {
 <!-- Slide Sheet: Academics -->
 <div id="sheet-academics" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
-    <span class="sheet-title">Academics Selection</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <span class="sheet-title">Academics / Quiz Selection</span>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeSheet()">&times;</button>
   </div>
   <div class="sheet-body" id="academics-body">
   </div>
@@ -872,9 +797,11 @@ const ZoneForm = (() => {
 <!-- Slide Sheet: Academics Subject Detail -->
 <div id="sheet-acad-detail" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title" id="acad-detail-title">Subject Title</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeAcadDetail()">&times;</button>
+  </div>
+  <div class="sheet-back-bar">
+    <button class="btn-sheet-back" onclick="ZoneForm.closeAcadDetail()">&#8592; Back to Academics</button>
   </div>
   <div class="sheet-body" id="acad-detail-body">
   </div>
@@ -883,9 +810,8 @@ const ZoneForm = (() => {
 <!-- Slide Sheet: Technical Skills -->
 <div id="sheet-skills" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title">Technical Skills Selection</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeSheet()">&times;</button>
   </div>
   <div class="sheet-body" id="skills-body">
   </div>
@@ -894,9 +820,11 @@ const ZoneForm = (() => {
 <!-- Slide Sheet: Skills Category Detail -->
 <div id="sheet-skill-detail" class="slide-sheet">
   <div class="sheet-header">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title" id="skill-detail-title">Skill Category</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeSkillDetail()">&times;</button>
+  </div>
+  <div class="sheet-back-bar">
+    <button class="btn-sheet-back" onclick="ZoneForm.closeSkillDetail()">&#8592; Back to Skills</button>
   </div>
   <div class="sheet-body" id="skill-detail-body">
   </div>
@@ -905,22 +833,36 @@ const ZoneForm = (() => {
 <!-- Bottom Drawer: Selection Summary -->
 <div id="drawer-summary" class="slide-sheet" style="top: auto; bottom: -100%; height: 80%; width: 100%; max-width: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
   <div class="sheet-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
     <span class="sheet-title">Zonal Selections Summary</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeDrawer('summary')">&times;</button>
   </div>
   <div class="sheet-body" id="summary-body">
   </div>
 </div>
 
-<!-- Bottom Drawer: Zone Records -->
-<div id="drawer-zone-records" class="slide-sheet" style="top: auto; bottom: -100%; height: 85%; width: 100%; max-width: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
-  <div class="sheet-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
-    <button class="btn-sheet-back-header" onclick="ZoneForm.back()">&#8592; Back</button>
-    <span class="sheet-title">Zone Records — All Submissions</span>
-    <button class="btn-close-sheet" onclick="ZoneForm.back()">&times;</button>
+<!-- Bottom Drawer: Submit Selections Confirmation -->
+<div id="drawer-confirm" class="slide-sheet" style="top: auto; bottom: -100%; height: 70%; width: 100%; max-width: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+  <div class="sheet-header" style="border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--db-navy);">
+    <span class="sheet-title">Confirm Zone Selections</span>
+    <button class="btn-close-sheet" onclick="ZoneForm.closeDrawer('confirm')">&times;</button>
   </div>
-  <div class="sheet-body" id="zone-records-body">
+  <div class="sheet-body" id="confirm-body" style="padding: 24px;">
+  </div>
+</div>
+
+<!-- Submission Success Overlay -->
+<div id="panel-success" class="success-panel hidden">
+  <div class="success-icon">&#10004;</div>
+  <div class="success-title">Selections Successfully Submitted!</div>
+  <div class="success-card" id="success-card-body">
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 400px;">
+    <button onclick="ZoneForm.sendWhatsApp()" class="db-action-btn db-action-primary" style="background:#25d366; color:#fff; padding: 14px; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
+      💬 SEND WHATSAPP REPORT
+    </button>
+    <button onclick="App.backToLanding()" class="db-action-btn db-action-outline" style="border:1.5px solid var(--db-navy); color:var(--db-navy); background:#fff; padding: 14px; font-weight:700; border-radius:8px; cursor:pointer;">
+      🏡 RETURN TO LANDING
+    </button>
   </div>
 </div>
 `;
@@ -936,122 +878,138 @@ const ZoneForm = (() => {
     if (arrow) arrow.classList.toggle('open', isHidden);
   }
 
-  function _normalise(data) {
-    if (!data.learnerSubType && data.type)       data.learnerSubType = data.type;
-    if (!data.fullName && data.participant)       data.fullName = data.participant;
-    if (!data.schoolName && data.school)          data.schoolName = data.school;
-    if (data.category)       data.category       = (data.category + '').trim();
-    if (data.level)          data.level          = (data.level + '').trim();
-    if (data.learnerSubType) data.learnerSubType = (data.learnerSubType + '').trim();
-    return data;
-  }
-
   // ── Database Data Loading ─────────────────────────────────────
   async function loadAllZoneData() {
     const spinner = document.getElementById('zf-initial-loading');
     const content = document.getElementById('zf-main-content');
     try {
-      // 1. Initial manual fetch
-      const snap = await db.collection('submissions')
+      // Query all school submissions inside coordinator's zone
+      const snap = await db.collection('school_submissions')
+        .where('zone', '==', _auth.zone)
+        .get();
+      
+      _allCandidates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Fetch existing selections to recover state if already submitted
+      const selectionSnap = await db.collection('zone_submissions')
         .where('zone', '==', _auth.zone)
         .get();
 
-      _allCandidates = snap.docs.map(d => {
-        const data = _normalise({ ...d.data() });
-        return { id: d.id, ...data };
-      });
+      const existingSelIds = new Set(selectionSnap.docs.map(d => d.id));
 
-      _selections = new Set(_allCandidates.filter(c => c.selectedForDistrict === true).map(c => c.id));
+      // Calculate auto-selections
+      precomputeSelections(existingSelIds);
 
-      // Save to local storage cache for instant offline loading next time
-      localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-        candidates: _allCandidates,
-        selections: Array.from(_selections),
-        timestamp: Date.now()
-      }));
-
-      // Render the freshly synced data
       updateDashboardState();
-      refreshOpenViews();
-
-      // 2. Real-time background sync (onSnapshot)
-      if (_unsubscribe) _unsubscribe();
-      _unsubscribe = db.collection('submissions')
-        .where('zone', '==', _auth.zone)
-        .onSnapshot(liveSnap => {
-          _allCandidates = liveSnap.docs.map(d => {
-            const data = _normalise({ ...d.data() });
-            return { id: d.id, ...data };
-          });
-          _selections = new Set(_allCandidates.filter(c => c.selectedForDistrict === true).map(c => c.id));
-
-          // Silently update cache
-          localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-            candidates: _allCandidates,
-            selections: Array.from(_selections),
-            timestamp: Date.now()
-          }));
-
-          updateDashboardState();
-          refreshOpenViews();
-        }, err => {
-          console.error('onSnapshot error', err);
-        });
 
     } catch (err) {
-      console.error('Failed to load submissions roster', err);
+      console.error('Failed to load school submissions roster', err);
+      alert('Error fetching submission roster. Please try again.');
     } finally {
       if (spinner) spinner.classList.add('hidden');
       if (content) content.classList.remove('hidden');
     }
   }
 
-  // Helper to re-draw active sub-panels reactively on Firestore update
-  function refreshOpenViews() {
-    const summaryDrawer = document.getElementById('drawer-summary');
-    if (summaryDrawer && summaryDrawer.classList.contains('active')) renderSummaryBody();
-
-    const recordsDrawer = document.getElementById('drawer-zone-records');
-    if (recordsDrawer && recordsDrawer.classList.contains('active')) renderZoneRecordsBody();
-
-    const detailSheet = document.getElementById('sheet-category-detail');
-    if (detailSheet && detailSheet.classList.contains('active')) renderCategoryDetailBody();
-
-    const acadDetailSheet = document.getElementById('sheet-acad-detail');
-    if (acadDetailSheet && acadDetailSheet.classList.contains('active')) renderAcadDetailBody();
-
-    const skillDetailSheet = document.getElementById('sheet-skill-detail');
-    if (skillDetailSheet && skillDetailSheet.classList.contains('active')) renderSkillDetailBody();
-
-    // Rerender sheet-level lists
-    const innovationsSheet = document.getElementById('sheet-innovations');
-    if (innovationsSheet && innovationsSheet.classList.contains('active')) renderInnovationsList();
-
-    const academicsSheet = document.getElementById('sheet-academics');
-    if (academicsSheet && academicsSheet.classList.contains('active')) renderAcademicsSheet();
-
-    const skillsSheet = document.getElementById('sheet-skills');
-    if (skillsSheet && skillsSheet.classList.contains('active')) renderSkillsSheet();
-  }
-
-  // Manual Force Sync Button Handler
-  async function forceRefresh() {
-    localStorage.removeItem(`jets_zone_cache_${_auth.zone}`);
-    
-    const spinner = document.getElementById('zf-initial-loading');
-    const content = document.getElementById('zf-main-content');
-    if (spinner) {
-      spinner.querySelector('.auth-checking-text').textContent = "Syncing live database...";
-      spinner.classList.remove('hidden');
-    }
-    if (content) content.classList.add('hidden');
-    
-    await loadAllZoneData();
-  }
-
   // Helper to generate info rows
   function ir(lbl, val) {
     return `<div class="info-row"><span class="info-label">${lbl}</span><span class="info-value">${val}</span></div>`;
+  }
+
+  // ── State Computation ─────────────────────────────────────────
+  function precomputeSelections(existingSelIds) {
+    _selections.clear();
+    _autoSelections.clear();
+
+    // 1. Learner Innovations
+    INNOVATION_CATEGORIES.forEach(cat => {
+      LEVELS.forEach(lvl => {
+        const matches = _allCandidates.filter(c => 
+          isLearnerInnov(c) &&
+          c.category === cat &&
+          c.level === lvl
+        );
+        if (matches.length === 1) {
+          const cid = matches[0].id;
+          _autoSelections.add(cid);
+          _selections.add(cid);
+        } else if (matches.length > 1) {
+          // If already submitted previously, restore selection
+          const prev = matches.find(m => existingSelIds.has(m.id));
+          if (prev) _selections.add(prev.id);
+        }
+      });
+    });
+
+    // 2. Teacher Innovations
+    INNOVATION_CATEGORIES.forEach(cat => {
+      const matches = _allCandidates.filter(c => 
+        c.participantType === 'Teacher' &&
+        c.category === cat
+      );
+      if (matches.length === 1) {
+        const cid = matches[0].id;
+        _autoSelections.add(cid);
+        _selections.add(cid);
+      } else if (matches.length > 1) {
+        const prev = matches.find(m => existingSelIds.has(m.id));
+        if (prev) _selections.add(prev.id);
+      }
+    });
+
+    // 3. Youth Innovations
+    INNOVATION_CATEGORIES.forEach(cat => {
+      const matches = _allCandidates.filter(c => 
+        c.participantType === 'Out-of-School Youth' &&
+        c.category === cat
+      );
+      if (matches.length === 1) {
+        const cid = matches[0].id;
+        _autoSelections.add(cid);
+        _selections.add(cid);
+      } else if (matches.length > 1) {
+        const prev = matches.find(m => existingSelIds.has(m.id));
+        if (prev) _selections.add(prev.id);
+      }
+    });
+
+    // 4. Academics
+    ACADEMIC_SLOTS.forEach(slot => {
+      const matches = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Academics / Quiz & Olympiads' &&
+        c.category === slot.category &&
+        c.level === slot.level
+      );
+      if (matches.length === 1) {
+        const cid = matches[0].id;
+        _autoSelections.add(cid);
+        _selections.add(cid);
+      } else if (matches.length > 1) {
+        const prev = matches.find(m => existingSelIds.has(m.id));
+        if (prev) _selections.add(prev.id);
+      }
+    });
+
+    // 5. Technical Skills
+    SKILL_CATEGORIES.forEach(skill => {
+      const limit = SKILL_LIMITS[skill];
+      const matches = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Technical Skills' &&
+        c.category === skill
+      );
+      if (matches.length <= limit) {
+        matches.forEach(m => {
+          _autoSelections.add(m.id);
+          _selections.add(m.id);
+        });
+      } else {
+        matches.forEach(m => {
+          if (existingSelIds.has(m.id)) _selections.add(m.id);
+        });
+      }
+    });
   }
 
   // Real-time counter and progress bar states
@@ -1087,6 +1045,10 @@ const ZoneForm = (() => {
 
     // Main button progress badges
     updateGridBadges();
+
+    // Bottom submit button text
+    const submitBtn = document.getElementById('submit-btn-label');
+    if (submitBtn) submitBtn.textContent = `SUBMIT ${count} OF 64 SELECTIONS`;
   }
 
   // Section quota badge calculators
@@ -1170,26 +1132,22 @@ const ZoneForm = (() => {
   }
 
   // ── Navigation Sheet Controllers ──────────────────────────────
-  function openSheet(name, title) {
+  function openSheet(name) {
     _activeSheet = name;
     
+    // Set overlay active
+    const overlay = document.getElementById('sheet-overlay');
+    if (overlay) overlay.classList.add('active');
+
     // Slide in the sheet
     const sheet = document.getElementById('sheet-' + name);
-    if (sheet) {
-      const titleEl = sheet.querySelector('.sheet-title');
-      if (titleEl && title) titleEl.textContent = title;
-      
-      const tabsEl = sheet.querySelector('.sheet-tabs');
-      if (tabsEl) {
-        tabsEl.style.display = 'none'; // Dedicated grid buttons, so hide old tabs
-      }
-      
-      sheet.classList.add('active');
-    }
+    if (sheet) sheet.classList.add('active');
+
+    document.body.style.overflow = 'hidden';
 
     // Sheet specific initial renders
     if (name === 'innovations') {
-      renderInnovationsList();
+      switchSubTab(_activeTab);
     } else if (name === 'academics') {
       renderAcademicsSheet();
     } else if (name === 'skills') {
@@ -1197,63 +1155,31 @@ const ZoneForm = (() => {
     }
   }
 
-  function closeSheet(name) {
-    const sheet = document.getElementById('sheet-' + name);
+  function closeSheet() {
+    if (!_activeSheet) return;
+    const sheet = document.getElementById('sheet-' + _activeSheet);
     if (sheet) sheet.classList.remove('active');
+
+    const overlay = document.getElementById('sheet-overlay');
+    if (overlay) overlay.classList.remove('active');
+
+    document.body.style.overflow = '';
     _activeSheet = null;
+    
     updateDashboardState();
   }
 
-  // Navigation Stack back routing handler
-  function back() {
-    Nav.pop();
+  // ── Innovations subtab controllers ─────────────────────────────
+  function switchSubTab(tab) {
+    _activeTab = tab;
+    ['learner', 'teacher', 'youth'].forEach(t => {
+      const btn = document.getElementById('tab-' + t);
+      if (btn) btn.classList.toggle('active', t === tab);
+    });
+
+    renderInnovationsList();
   }
 
-  // ── Innovations Grid Nav Actions ──────────────────────────────
-  function openLearnerInnovations() {
-    _activeTab = 'learner';
-    Nav.push(
-      'learner-innovations',
-      () => openSheet('innovations', 'Learner Innovations Selection'),
-      () => closeSheet('innovations')
-    );
-  }
-
-  function openTeacherInnovations() {
-    _activeTab = 'teacher';
-    Nav.push(
-      'teacher-innovations',
-      () => openSheet('innovations', 'Teacher Innovations Selection'),
-      () => closeSheet('innovations')
-    );
-  }
-
-  function openYouthInnovations() {
-    _activeTab = 'youth';
-    Nav.push(
-      'youth-innovations',
-      () => openSheet('innovations', 'Youth Innovations Selection'),
-      () => closeSheet('innovations')
-    );
-  }
-
-  function openAcademics() {
-    Nav.push(
-      'academics',
-      () => openSheet('academics', 'Academics & Quiz Selection'),
-      () => closeSheet('academics')
-    );
-  }
-
-  function openSkills() {
-    Nav.push(
-      'skills',
-      () => openSheet('skills', 'Technical Skills Selection'),
-      () => closeSheet('skills')
-    );
-  }
-
-  // ── Innovations lists rendering with Category Card colors ──
   function renderInnovationsList() {
     const listEl = document.getElementById('innovations-list');
     if (!listEl) return;
@@ -1292,22 +1218,12 @@ const ZoneForm = (() => {
         if (matches.some(m => _selections.has(m.id))) selected++;
       }
 
-      // Card visual state colors
-      const isFilled = selected === limit;
-      const isAvailable = avail > 0 && selected < limit;
-      const isEmpty = avail === 0 && selected === 0;
-
-      let cardStateClass = '';
-      if (isFilled) cardStateClass = 'filled';
-      else if (isAvailable) cardStateClass = 'available';
-      else if (isEmpty) cardStateClass = 'empty';
-
-      const metaBadge = isFilled ? '<span class="selection-btn-badge badge-complete">FILLED</span>'
-                      : isAvailable ? `<span class="selection-btn-badge badge-partial">${selected}/${limit}</span>`
-                      : '<span class="selection-btn-badge badge-empty">0 available</span>';
+      const metaBadge = selected === 0 ? '<span class="selection-btn-badge badge-empty">0 slots</span>'
+                      : selected < limit ? `<span class="selection-btn-badge badge-partial">${selected}/${limit}</span>`
+                      : `<span class="selection-btn-badge badge-complete">FILLED</span>`;
 
       return `
-        <div class="category-btn ${cardStateClass}" onclick="ZoneForm.showCategoryDetail('${esc(cat)}')">
+        <div class="category-btn" onclick="ZoneForm.showCategoryDetail('${esc(cat)}')">
           <span class="category-name">${esc(cat)}</span>
           <div class="category-meta">
             ${metaBadge}
@@ -1322,21 +1238,21 @@ const ZoneForm = (() => {
   // Detailed sheet showing participant cards inside Innovations Category
   function showCategoryDetail(cat) {
     _selectedCategory = cat;
-    Nav.push(
-      'category-detail',
-      () => {
-        const detailSheet = document.getElementById('sheet-category-detail');
-        const titleEl = document.getElementById('cat-detail-title');
-        if (titleEl) titleEl.textContent = cat;
-        if (detailSheet) detailSheet.classList.add('active');
-        renderCategoryDetailBody();
-      },
-      () => {
-        const detailSheet = document.getElementById('sheet-category-detail');
-        if (detailSheet) detailSheet.classList.remove('active');
-        _selectedCategory = null;
-      }
-    );
+    const detailSheet = document.getElementById('sheet-category-detail');
+    const titleEl = document.getElementById('cat-detail-title');
+    const bodyEl = document.getElementById('cat-detail-body');
+
+    if (titleEl) titleEl.textContent = cat;
+    if (detailSheet) detailSheet.classList.add('active');
+
+    renderCategoryDetailBody();
+  }
+
+  function closeCategoryDetail() {
+    const detailSheet = document.getElementById('sheet-category-detail');
+    if (detailSheet) detailSheet.classList.remove('active');
+    _selectedCategory = null;
+    switchSubTab(_activeTab);
   }
 
   function renderCategoryDetailBody() {
@@ -1356,9 +1272,10 @@ const ZoneForm = (() => {
         let content = '';
         if (matches.length === 0) {
           content = `<div class="empty-slot-msg">No ${lvl} submissions in this zone for this category</div>`;
+        } else if (matches.length === 1) {
+          content = buildParticipantCardHTML(matches[0], true);
         } else {
-          const isLvlFull = matches.some(c => _selections.has(c.id));
-          content = matches.map(p => buildParticipantCardHTML(p, false, isLvlFull)).join('');
+          content = matches.map(p => buildParticipantCardHTML(p, false)).join('');
         }
 
         return `
@@ -1366,7 +1283,7 @@ const ZoneForm = (() => {
           ${content}`;
       }).join('');
     } else {
-      // Teacher or Out-of-School Youth
+      // Teacher or Youth Selection
       const matches = _allCandidates.filter(c => 
         c.participantType === (_activeTab === 'teacher' ? 'Teacher' : 'Out-of-School Youth') &&
         c.category === _selectedCategory
@@ -1374,9 +1291,10 @@ const ZoneForm = (() => {
 
       if (matches.length === 0) {
         html = `<div class="empty-slot-msg" style="margin-top:24px;">No submissions in this zone for this category</div>`;
+      } else if (matches.length === 1) {
+        html = buildParticipantCardHTML(matches[0], true);
       } else {
-        const isFull = matches.some(c => _selections.has(c.id));
-        html = matches.map(p => buildParticipantCardHTML(p, false, isFull)).join('');
+        html = matches.map(p => buildParticipantCardHTML(p, false)).join('');
       }
     }
 
@@ -1388,6 +1306,7 @@ const ZoneForm = (() => {
     const bodyEl = document.getElementById('academics-body');
     if (!bodyEl) return;
 
+    // Group subjects by Level
     const levelsGrouped = ['ECE & Primary', 'Junior Secondary', 'Senior Secondary'];
     
     const html = levelsGrouped.map(lvl => {
@@ -1402,22 +1321,14 @@ const ZoneForm = (() => {
         );
 
         const isSelected = matches.some(m => _selections.has(m.id));
-        const isAvailable = matches.length > 0 && !isSelected;
-        const isEmpty = matches.length === 0;
-
-        let cardStateClass = '';
-        if (isSelected) cardStateClass = 'filled';
-        else if (isAvailable) cardStateClass = 'available';
-        else if (isEmpty) cardStateClass = 'empty';
-
         const badge = isSelected ? '<span class="selection-btn-badge badge-complete">FILLED</span>'
-                      : isAvailable ? '<span class="selection-btn-badge badge-partial">0/1</span>'
-                      : '<span class="selection-btn-badge badge-empty">0 available</span>';
+                      : '<span class="selection-btn-badge badge-empty">0/1</span>';
 
+        // Strip subject name of Quiz prefix for cleaner rendering
         const cleanSubj = slot.category.replace('Quiz & Olympiads — ', '');
 
         return `
-          <div class="category-btn ${cardStateClass}" onclick="ZoneForm.showAcadSubjectDetail('${esc(slot.category)}', '${esc(lvl)}')">
+          <div class="category-btn" onclick="ZoneForm.showAcadSubjectDetail('${esc(slot.category)}', '${esc(lvl)}')">
             <span class="category-name">${esc(cleanSubj)}</span>
             <div class="category-meta">
               ${badge}
@@ -1436,22 +1347,22 @@ const ZoneForm = (() => {
 
   function showAcadSubjectDetail(subject, level) {
     _selectedSubject = { subject, level };
-    Nav.push(
-      'acad-detail',
-      () => {
-        const detailSheet = document.getElementById('sheet-acad-detail');
-        const titleEl = document.getElementById('acad-detail-title');
-        const cleanTitle = subject.replace('Quiz & Olympiads — ', '') + ` (${level})`;
-        if (titleEl) titleEl.textContent = cleanTitle;
-        if (detailSheet) detailSheet.classList.add('active');
-        renderAcadDetailBody();
-      },
-      () => {
-        const detailSheet = document.getElementById('sheet-acad-detail');
-        if (detailSheet) detailSheet.classList.remove('active');
-        _selectedSubject = null;
-      }
-    );
+    const detailSheet = document.getElementById('sheet-acad-detail');
+    const titleEl = document.getElementById('acad-detail-title');
+    const bodyEl = document.getElementById('acad-detail-body');
+
+    const cleanTitle = subject.replace('Quiz & Olympiads — ', '') + ` (${level})`;
+    if (titleEl) titleEl.textContent = cleanTitle;
+    if (detailSheet) detailSheet.classList.add('active');
+
+    renderAcadDetailBody();
+  }
+
+  function closeAcadDetail() {
+    const detailSheet = document.getElementById('sheet-acad-detail');
+    if (detailSheet) detailSheet.classList.remove('active');
+    _selectedSubject = null;
+    renderAcademicsSheet();
   }
 
   function renderAcadDetailBody() {
@@ -1468,9 +1379,10 @@ const ZoneForm = (() => {
     let html = '';
     if (matches.length === 0) {
       html = `<div class="empty-slot-msg" style="margin-top:24px;">No submissions for ${esc(_selectedSubject.subject.replace('Quiz & Olympiads — ', ''))} from schools in your zone.</div>`;
+    } else if (matches.length === 1) {
+      html = buildParticipantCardHTML(matches[0], true);
     } else {
-      const isFull = matches.some(c => _selections.has(c.id));
-      html = matches.map(p => buildParticipantCardHTML(p, false, isFull)).join('');
+      html = matches.map(p => buildParticipantCardHTML(p, false)).join('');
     }
 
     bodyEl.innerHTML = html;
@@ -1490,21 +1402,14 @@ const ZoneForm = (() => {
       );
 
       const selectedCount = matches.filter(m => _selections.has(m.id)).length;
-      const isFilled = selectedCount === limit;
-      const isAvailable = matches.length > 0 && selectedCount < limit;
-      const isEmpty = matches.length === 0 && selectedCount === 0;
-
-      let cardStateClass = '';
-      if (isFilled) cardStateClass = 'filled';
-      else if (isAvailable) cardStateClass = 'available';
-      else if (isEmpty) cardStateClass = 'empty';
-
-      const badge = isFilled ? '<span class="selection-btn-badge badge-complete">FILLED</span>'
-                    : isAvailable ? `<span class="selection-btn-badge badge-partial">${selectedCount}/${limit}</span>`
-                    : '<span class="selection-btn-badge badge-empty">0 available</span>';
+      
+      const badgeClass = selectedCount === 0 ? 'badge-empty'
+                       : selectedCount < limit ? 'badge-partial' : 'badge-complete';
+      
+      const badge = `<span class="selection-btn-badge ${badgeClass}">${selectedCount}/${limit}</span>`;
 
       return `
-        <div class="category-btn ${cardStateClass}" style="margin-bottom:10px;" onclick="ZoneForm.showSkillCategoryDetail('${esc(skill)}')">
+        <div class="category-btn" style="margin-bottom:10px;" onclick="ZoneForm.showSkillCategoryDetail('${esc(skill)}')">
           <span class="category-name">${esc(skill)}</span>
           <div class="category-meta">
             ${badge}
@@ -1518,21 +1423,21 @@ const ZoneForm = (() => {
 
   function showSkillCategoryDetail(skill) {
     _selectedSkill = skill;
-    Nav.push(
-      'skill-detail',
-      () => {
-        const detailSheet = document.getElementById('sheet-skill-detail');
-        const titleEl = document.getElementById('skill-detail-title');
-        if (titleEl) titleEl.textContent = skill;
-        if (detailSheet) detailSheet.classList.add('active');
-        renderSkillDetailBody();
-      },
-      () => {
-        const detailSheet = document.getElementById('sheet-skill-detail');
-        if (detailSheet) detailSheet.classList.remove('active');
-        _selectedSkill = null;
-      }
-    );
+    const detailSheet = document.getElementById('sheet-skill-detail');
+    const titleEl = document.getElementById('skill-detail-title');
+    const bodyEl = document.getElementById('skill-detail-body');
+
+    if (titleEl) titleEl.textContent = skill;
+    if (detailSheet) detailSheet.classList.add('active');
+
+    renderSkillDetailBody();
+  }
+
+  function closeSkillDetail() {
+    const detailSheet = document.getElementById('sheet-skill-detail');
+    if (detailSheet) detailSheet.classList.remove('active');
+    _selectedSkill = null;
+    renderSkillsSheet();
   }
 
   function renderSkillDetailBody() {
@@ -1549,7 +1454,11 @@ const ZoneForm = (() => {
     let html = '';
     if (matches.length === 0) {
       html = `<div class="empty-slot-msg" style="margin-top:24px;">No submissions for ${esc(_selectedSkill)} from schools in your zone.</div>`;
+    } else if (matches.length <= limit) {
+      // Auto-selected
+      html = matches.map(p => buildParticipantCardHTML(p, true)).join('');
     } else {
+      // Manual selection list
       const selectedCount = matches.filter(m => _selections.has(m.id)).length;
       const isFull = selectedCount >= limit;
 
@@ -1563,24 +1472,31 @@ const ZoneForm = (() => {
   }
 
   // ── HTML Card Builder ──────────────────────────────────────────
-  function buildParticipantCardHTML(p, _unused, isCategoryFull = false) {
+  function buildParticipantCardHTML(p, isAuto, isCategoryFull = false) {
     const isSelected = _selections.has(p.id);
     const cardClass = isSelected ? 'participant-card selected' : 'participant-card';
-
-    const badge = isSelected ? '<span class="card-badge badge-selected-manual">SELECTED</span>' : '';
-
-    let selectBtnHTML;
-    if (isSelected) {
-      selectBtnHTML = `<button class="btn-select selected" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
-    } else {
-      const disabledAttr = isCategoryFull ? 'disabled style="border-color:#ccc; color:#aaa; cursor:not-allowed;"' : '';
-      selectBtnHTML = `<button class="btn-select" ${disabledAttr} onclick="ZoneForm.selectParticipant('${p.id}')">SELECT</button>`;
+    
+    let badge = '';
+    if (isAuto) {
+      badge = '<span class="card-badge badge-selected-auto">AUTO SELECTED</span>';
+    } else if (isSelected) {
+      badge = '<span class="card-badge badge-selected-manual">SELECTED</span>';
     }
 
-    const titleInfo = p.titleOfInnovation ? `<div class="p-title"><strong>Title:</strong> ${esc(p.titleOfInnovation)}</div>` : (p.title ? `<div class="p-title"><strong>Title:</strong> ${esc(p.title)}</div>` : '');
-    const detailsLine = p.learnerSubType === 'Technical Skills'
-      ? `Sub-Skill: ${esc(p.subSkill || p.learnerSubskill || 'General')}`
-      : `Level: ${esc(p.level || '—')} &nbsp;|&nbsp; Grade: ${esc(p.grade || p.gradeForm || '—')}`;
+    let selectBtnHTML = '';
+    if (!isAuto) {
+      if (isSelected) {
+        selectBtnHTML = `<button class="btn-select selected" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
+      } else {
+        const disabledAttr = isCategoryFull ? 'disabled style="border-color:#ccc; color:#aaa; cursor:not-allowed;"' : '';
+        selectBtnHTML = `<button class="btn-select" ${disabledAttr} onclick="ZoneForm.selectParticipant('${p.id}')">SELECT</button>`;
+      }
+    }
+
+    const titleInfo = p.title ? `<div class="p-title"><strong>Title:</strong> ${esc(p.title)}</div>` : '';
+    const detailsLine = p.learnerSubType === 'Technical Skills' 
+      ? `Sub-Skill: ${esc(p.learnerSubskill || p.subSkill || 'General')}`
+      : `Level: ${esc(p.level)} &nbsp;|&nbsp; Grade: ${esc(p.grade || '—')}`;
 
     return `
       <div class="${cardClass}" id="p-card-${p.id}">
@@ -1594,385 +1510,422 @@ const ZoneForm = (() => {
   }
 
   // ── Selection Logic Toggles ────────────────────────────────────
-  async function selectParticipant(id) {
-    if (_submitting) return;
+  function selectParticipant(id) {
     const candidate = _allCandidates.find(c => c.id === id);
     if (!candidate) return;
 
-    let siblingIds = [];
-
+    // Apply selection rules depending on section
     if (isLearnerInnov(candidate)) {
-      siblingIds = _allCandidates
-        .filter(c => isLearnerInnov(c) && c.category === candidate.category && c.level === candidate.level && c.id !== id && _selections.has(c.id))
-        .map(c => c.id);
+      // Learner Innovations: Select ONLY 1 per level per category
+      const siblings = _allCandidates.filter(c => 
+        isLearnerInnov(c) &&
+        c.category === candidate.category &&
+        c.level === candidate.level
+      );
+      siblings.forEach(s => _selections.delete(s.id));
+      _selections.add(id);
+
     } else if (candidate.participantType === 'Teacher') {
-      siblingIds = _allCandidates
-        .filter(c => c.participantType === 'Teacher' && c.category === candidate.category && c.id !== id && _selections.has(c.id))
-        .map(c => c.id);
+      // Teacher: Select 1 per category
+      const siblings = _allCandidates.filter(c => 
+        c.participantType === 'Teacher' &&
+        c.category === candidate.category
+      );
+      siblings.forEach(s => _selections.delete(s.id));
+      _selections.add(id);
+
     } else if (candidate.participantType === 'Out-of-School Youth') {
-      siblingIds = _allCandidates
-        .filter(c => c.participantType === 'Out-of-School Youth' && c.category === candidate.category && c.id !== id && _selections.has(c.id))
-        .map(c => c.id);
+      // Youth: Select 1 per category
+      const siblings = _allCandidates.filter(c => 
+        c.participantType === 'Out-of-School Youth' &&
+        c.category === candidate.category
+      );
+      siblings.forEach(s => _selections.delete(s.id));
+      _selections.add(id);
+
     } else if (candidate.participantType === 'Learner' && candidate.learnerSubType === 'Academics / Quiz & Olympiads') {
-      siblingIds = _allCandidates
-        .filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads' && c.category === candidate.category && c.level === candidate.level && c.id !== id && _selections.has(c.id))
-        .map(c => c.id);
+      // Academics: Select 1 per subject per level
+      const siblings = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Academics / Quiz & Olympiads' &&
+        c.category === candidate.category &&
+        c.level === candidate.level
+      );
+      siblings.forEach(s => _selections.delete(s.id));
+      _selections.add(id);
+
     } else if (candidate.participantType === 'Learner' && candidate.learnerSubType === 'Technical Skills') {
+      // Technical Skills: Allow multiple up to limit
       const limit = SKILL_LIMITS[candidate.category];
-      const currentCount = _allCandidates.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills' && c.category === candidate.category && _selections.has(c.id)).length;
-      if (currentCount >= limit) {
-        alert(`Maximum ${limit} slot${limit > 1 ? 's' : ''} allowed for ${candidate.category}.`);
+      const siblings = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Technical Skills' &&
+        c.category === candidate.category
+      );
+      const selectedSiblingsCount = siblings.filter(s => _selections.has(s.id)).length;
+      if (selectedSiblingsCount < limit) {
+        _selections.add(id);
+      } else {
+        alert(`Maximum ${limit} slots allowed for ${candidate.category}.`);
         return;
       }
     }
 
-    // Optimistic UI updates
-    siblingIds.forEach(sid => _selections.delete(sid));
-    _selections.add(id);
-    
-    // Save cache instantly
-    localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-      candidates: _allCandidates,
-      selections: Array.from(_selections),
-      timestamp: Date.now()
-    }));
+    // Refresh active details view
+    if (_selectedCategory) renderCategoryDetailBody();
+    if (_selectedSubject) renderAcadDetailBody();
+    if (_selectedSkill) renderSkillDetailBody();
 
-    refreshOpenViews();
     updateDashboardState();
-
-    // Persist changes directly to submissions collection in Firestore
-    try {
-      _submitting = true;
-      await Promise.all([
-        FirestoreDB.selectForDistrict(id, _auth.organiserName, _auth.zone),
-        ...siblingIds.map(sid => FirestoreDB.deselectFromDistrict(sid))
-      ]);
-    } catch (err) {
-      console.error('Selection save failed', err);
-      // Revert optimistic update
-      _selections.delete(id);
-      siblingIds.forEach(sid => _selections.add(sid));
-      
-      localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-        candidates: _allCandidates,
-        selections: Array.from(_selections),
-        timestamp: Date.now()
-      }));
-
-      refreshOpenViews();
-      updateDashboardState();
-      alert('Failed to save selection. Checked your connection.');
-    } finally {
-      _submitting = false;
-    }
   }
 
-  async function deselectParticipant(id) {
-    if (_submitting) return;
-
-    // Optimistic UI updates
+  function deselectParticipant(id) {
     _selections.delete(id);
-    
-    // Save cache instantly
-    localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-      candidates: _allCandidates,
-      selections: Array.from(_selections),
-      timestamp: Date.now()
-    }));
 
-    refreshOpenViews();
+    // Refresh active details view
+    if (_selectedCategory) renderCategoryDetailBody();
+    if (_selectedSubject) renderAcadDetailBody();
+    if (_selectedSkill) renderSkillDetailBody();
+
     updateDashboardState();
 
-    // Persist deselect directly to submissions in Firestore
-    try {
-      _submitting = true;
-      await FirestoreDB.deselectFromDistrict(id);
-    } catch (err) {
-      console.error('Deselection save failed', err);
-      _selections.add(id);
-      
-      localStorage.setItem(`jets_zone_cache_${_auth.zone}`, JSON.stringify({
-        candidates: _allCandidates,
-        selections: Array.from(_selections),
-        timestamp: Date.now()
-      }));
-
-      refreshOpenViews();
-      updateDashboardState();
-      alert('Failed to save deselection. Checked your connection.');
-    } finally {
-      _submitting = false;
+    // Refresh summary view if active
+    const summaryDrawer = document.getElementById('drawer-summary');
+    if (summaryDrawer && summaryDrawer.classList.contains('active')) {
+      renderSummaryBody();
     }
   }
 
-  // ── Selected Participants 64-Slots Summary Drawer ──────────────
+  // ── Bottom Drawer summary list ──────────────────────────────────
   function openSummary() {
-    Nav.push(
-      'summary',
-      () => {
-        const drawer = document.getElementById('drawer-summary');
-        if (drawer) drawer.classList.add('active');
-        renderSummaryBody();
-      },
-      () => {
-        const drawer = document.getElementById('drawer-summary');
-        if (drawer) drawer.classList.remove('active');
-      }
-    );
+    const summaryDrawer = document.getElementById('drawer-summary');
+    const overlay = document.getElementById('sheet-overlay');
+    if (summaryDrawer) summaryDrawer.classList.add('active');
+    if (overlay) overlay.classList.add('active');
+
+    renderSummaryBody();
   }
 
-  function getAll64Slots() {
-    const slots = [];
-
-    // 1. Learner Innovations (27)
-    INNOVATION_CATEGORIES.forEach(cat => {
-      LEVELS.forEach(lvl => {
-        slots.push({
-          type: 'Learner Innovation',
-          category: cat,
-          level: lvl,
-          label: `${lvl} — ${cat.replace(' Innovations', '')}`
-        });
-      });
-    });
-
-    // 2. Teacher Innovations (9)
-    INNOVATION_CATEGORIES.forEach(cat => {
-      slots.push({
-        type: 'Teacher Innovation',
-        category: cat,
-        level: '',
-        label: `Teacher — ${cat.replace(' Innovations', '')}`
-      });
-    });
-
-    // 3. Youth Innovations (9)
-    INNOVATION_CATEGORIES.forEach(cat => {
-      slots.push({
-        type: 'Youth Innovation',
-        category: cat,
-        level: '',
-        label: `Out-of-School Youth — ${cat.replace(' Innovations', '')}`
-      });
-    });
-
-    // 4. Academics (7)
-    ACADEMIC_SLOTS.forEach(slot => {
-      slots.push({
-        type: 'Academic Quiz',
-        category: slot.category,
-        level: slot.level,
-        label: `Academics — ${slot.label}`
-      });
-    });
-
-    // 5. Technical Skills (12)
-    SKILL_CATEGORIES.forEach(skill => {
-      const limit = SKILL_LIMITS[skill];
-      for (let i = 1; i <= limit; i++) {
-        slots.push({
-          type: 'Technical Skills',
-          category: skill,
-          level: '',
-          label: `${skill} (Slot ${i})`,
-          slotIndex: i
-        });
-      }
-    });
-
-    return slots;
-  }
-
-  function getFilledAndEmptySlots() {
-    const allSlots = getAll64Slots();
-    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
+  function closeDrawer(name) {
+    const drawer = document.getElementById('drawer-' + name);
+    const overlay = document.getElementById('sheet-overlay');
+    if (drawer) drawer.classList.remove('active');
     
-    const filled = [];
-    const empty = [];
-    
-    let candidatesLeft = [...selectedList];
-    
-    allSlots.forEach(slot => {
-      let matchedIndex = -1;
-      
-      if (slot.type === 'Learner Innovation') {
-        matchedIndex = candidatesLeft.findIndex(c => 
-          isLearnerInnov(c) && c.category === slot.category && c.level === slot.level
-        );
-      } else if (slot.type === 'Teacher Innovation') {
-        matchedIndex = candidatesLeft.findIndex(c => 
-          c.participantType === 'Teacher' && c.category === slot.category
-        );
-      } else if (slot.type === 'Youth Innovation') {
-        matchedIndex = candidatesLeft.findIndex(c => 
-          c.participantType === 'Out-of-School Youth' && c.category === slot.category
-        );
-      } else if (slot.type === 'Academic Quiz') {
-        matchedIndex = candidatesLeft.findIndex(c => 
-          c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads' && 
-          c.category === slot.category && c.level === slot.level
-        );
-      } else if (slot.type === 'Technical Skills') {
-        matchedIndex = candidatesLeft.findIndex(c => 
-          c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills' && 
-          c.category === slot.category
-        );
-      }
-      
-      if (matchedIndex !== -1) {
-        const candidate = candidatesLeft.splice(matchedIndex, 1)[0];
-        filled.push({ slot, candidate });
-      } else {
-        empty.push(slot);
-      }
-    });
-    
-    return { filled, empty };
+    // Close overlay if no other panels slide
+    const activeSheets = document.querySelectorAll('.slide-sheet.active');
+    if (activeSheets.length === 0 && overlay) overlay.classList.remove('active');
   }
 
   function renderSummaryBody() {
     const bodyEl = document.getElementById('summary-body');
     if (!bodyEl) return;
 
-    const { filled, empty } = getFilledAndEmptySlots();
-    const totalFilled = filled.length;
+    // Filters for summary
+    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
 
-    // 1. Completion Banner & WhatsApp share button
-    let completionBannerHTML = '';
-    if (totalFilled === ZONE_SLOT_TOTAL) {
-      const waText = encodeURIComponent(
-        `🏆 JETS 2026 DISTRICT SELECTION COMPLETE 🏆\n\n` +
-        `Zone: ${_auth.zone} Zone\n` +
-        `Coordinator: ${_auth.organiserName}\n` +
-        `Status: All 64 district slots fully selected and validated!\n\n` +
-        `Ready for DEC compilation.`
+    // Groups logic
+    const buildListHTML = (list) => {
+      if (list.length === 0) return '<div class="empty-slot-msg" style="margin:4px 0 10px 0;">No selections made yet</div>';
+      return list.map(p => {
+        const isAuto = _autoSelections.has(p.id);
+        const autoBadge = isAuto 
+          ? '<span class="sum-p-type-auto">Auto-Selected</span>' 
+          : '<span class="sum-p-type-manual">Manual Selection</span>';
+        
+        const deselectBtn = isAuto ? '' : `<button class="btn-sum-deselect" onclick="ZoneForm.deselectParticipant('${p.id}')">DESELECT</button>`;
+
+        const titleLine = p.learnerSubType === 'Technical Skills' 
+          ? `Sub-Skill: ${esc(p.learnerSubskill || p.subSkill || 'General')}`
+          : p.learnerSubType === 'Academics / Quiz & Olympiads'
+          ? `Subject: ${esc(p.category.replace('Quiz & Olympiads — ', ''))} | Level: ${esc(p.level)}`
+          : `Level: ${esc(p.level)} | Category: ${esc(p.category)}`;
+
+        return `
+          <div class="summary-item">
+            <div class="sum-p-info">
+              <span class="sum-p-title">${esc(p.fullName || p.participant)}</span>
+              <span style="font-size:12px; font-weight:600; color:#555;">🏫 ${esc(p.schoolName || p.school)}</span>
+              <span class="sum-p-cat">${titleLine}</span>
+              ${autoBadge}
+            </div>
+            ${deselectBtn}
+          </div>`;
+      }).join('');
+    };
+
+    // Calculate empty slots (where school submissions are zero)
+    const emptySlots = [];
+    
+    // Check Innovations empty
+    INNOVATION_CATEGORIES.forEach(cat => {
+      LEVELS.forEach(lvl => {
+        const candidates = _allCandidates.filter(c => 
+          isLearnerInnov(c) &&
+          c.category === cat &&
+          c.level === lvl
+        );
+        if (candidates.length === 0) emptySlots.push(`Learner Innovations — ${cat} (${lvl})`);
+      });
+    });
+
+    INNOVATION_CATEGORIES.forEach(cat => {
+      const teachers = _allCandidates.filter(c => c.participantType === 'Teacher' && c.category === cat);
+      if (teachers.length === 0) emptySlots.push(`Teacher Innovations — ${cat}`);
+      const youth = _allCandidates.filter(c => c.participantType === 'Out-of-School Youth' && c.category === cat);
+      if (youth.length === 0) emptySlots.push(`Youth Innovations — ${cat}`);
+    });
+
+    // Check Academics empty
+    ACADEMIC_SLOTS.forEach(slot => {
+      const candidates = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Academics / Quiz & Olympiads' &&
+        c.category === slot.category &&
+        c.level === slot.level
       );
-      completionBannerHTML = `
-        <div class="completion-banner">
-          <div class="completion-title">🎉 Congratulations! Zone Selection Complete!</div>
-          <p>All 64 selection slots have been filled. You can now notify the District Organiser.</p>
-          <a class="btn-whatsapp-complete" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">
-            Share Completion on WhatsApp 🟢
-          </a>
-        </div>
-      `;
-    }
+      if (candidates.length === 0) emptySlots.push(`Academics — ${slot.label}`);
+    });
 
-    // 2. Filled Slots List
-    const filledHTML = filled.map(({ slot, candidate }) => {
-      return `
-        <div class="summary-item">
-          <div class="sum-p-info">
-            <span class="sum-p-title">${esc(candidate.fullName)}</span>
-            <span style="font-size:12px; font-weight:600; color:#555;">🏫 ${esc(candidate.schoolName)}</span>
-            <span class="sum-p-cat">${esc(slot.label)}</span>
-          </div>
-          <button class="btn-sum-deselect" onclick="ZoneForm.deselectParticipant('${candidate.id}')">DESELECT</button>
-        </div>`;
-    }).join('');
+    // Check Skills empty
+    SKILL_CATEGORIES.forEach(skill => {
+      const candidates = _allCandidates.filter(c => 
+        c.participantType === 'Learner' &&
+        c.learnerSubType === 'Technical Skills' &&
+        c.category === skill
+      );
+      if (candidates.length === 0) emptySlots.push(`Technical Skills — ${skill}`);
+    });
 
-    // 3. Empty Slots List
-    const emptyHTML = empty.map(slot => {
-      return `
-        <div class="empty-slot-placeholder">
-          <div class="placeholder-circle">Empty</div>
-          <span class="placeholder-label">${esc(slot.label)}</span>
-        </div>`;
-    }).join('');
+    const lInnov = selectedList.filter(c => isLearnerInnov(c));
+    const tInnov = selectedList.filter(c => c.participantType === 'Teacher');
+    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth');
+    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads');
+    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills');
 
     bodyEl.innerHTML = `
-      ${completionBannerHTML}
-
-      <div class="summary-tot-card" style="margin-top:0; margin-bottom:16px;">
-        <strong>Selection Overview:</strong> ${totalFilled} / ${ZONE_SLOT_TOTAL} Slots Filled
-        <div class="progress-track" style="margin-top:8px; margin-bottom:0;">
-          <div class="progress-fill green" style="width: ${(totalFilled/ZONE_SLOT_TOTAL)*100}%"></div>
-        </div>
+      <div class="summary-sec">
+        <div class="summary-sec-title">Learner Innovations Selection (${lInnov.length} of 27)</div>
+        ${buildListHTML(lInnov)}
+      </div>
+      <div class="summary-sec">
+        <div class="summary-sec-title">Teacher Innovations Selection (${tInnov.length} of 9)</div>
+        ${buildListHTML(tInnov)}
+      </div>
+      <div class="summary-sec">
+        <div class="summary-sec-title">Youth Innovations Selection (${yInnov.length} of 9)</div>
+        ${buildListHTML(yInnov)}
+      </div>
+      <div class="summary-sec">
+        <div class="summary-sec-title">Academics Selection (${acad.length} of 7)</div>
+        ${buildListHTML(acad)}
+      </div>
+      <div class="summary-sec">
+        <div class="summary-sec-title">Technical Skills Selection (${sk.length} of 12)</div>
+        ${buildListHTML(sk)}
       </div>
 
-      <div class="summary-sec">
-        <div class="summary-sec-title">Selected Candidates (${totalFilled})</div>
-        ${totalFilled === 0 ? '<div class="empty-slot-msg">No selections made yet. Go to grid categories to select winners!</div>' : filledHTML}
+      <div class="empty-slots-title">Empty Slots / No School Submissions (${emptySlots.length})</div>
+      <div class="empty-slots-list">
+        ${emptySlots.length === 0 ? '<div class="empty-slot-msg">All zonal slot quotas have candidate submissions!</div>' : emptySlots.map(s => `<div class="empty-slot-item">⚠️ ${esc(s)}</div>`).join('')}
       </div>
 
-      <div class="summary-sec">
-        <div class="summary-sec-title">Remaining Empty Slots (${empty.length})</div>
-        ${empty.length === 0 ? '<div class="empty-slot-msg">All selection slots are filled!</div>' : emptyHTML}
+      <div class="summary-tot-card">
+        <strong>Selection Breakdown summary:</strong><br>
+        • Learner Innovations: ${lInnov.length} / 27<br>
+        • Teacher Innovations: ${tInnov.length} / 9<br>
+        • Youth Innovations: ${yInnov.length} / 9<br>
+        • Academics: ${acad.length} / 7<br>
+        • Technical Skills: ${sk.length} / 12<br>
+        <hr style="border:none; border-top:1px dashed #cbd5e1; margin:8px 0;">
+        <strong>TOTAL SELECTED SLOT QUOTA: ${selectedList.length} of 64</strong>
       </div>
     `;
   }
 
-  // ── Zone Records Drawer ─────────────────────────────────────────
-  function openZoneRecords() {
-    Nav.push(
-      'zone-records',
-      () => {
-        const drawer = document.getElementById('drawer-drawer-zone-records') || document.getElementById('drawer-zone-records');
-        if (drawer) drawer.classList.add('active');
-        renderZoneRecordsBody();
-      },
-      () => {
-        const drawer = document.getElementById('drawer-drawer-zone-records') || document.getElementById('drawer-zone-records');
-        if (drawer) drawer.classList.remove('active');
-      }
-    );
+  // ── Confirmation Drawer ─────────────────────────────────────────
+  function openConfirmSubmit() {
+    const confirmDrawer = document.getElementById('drawer-confirm');
+    const overlay = document.getElementById('sheet-overlay');
+    if (confirmDrawer) confirmDrawer.classList.add('active');
+    if (overlay) overlay.classList.add('active');
+
+    renderConfirmBody();
   }
 
-  function renderZoneRecordsBody() {
-    const bodyEl = document.getElementById('zone-records-body');
+  function renderConfirmBody() {
+    const bodyEl = document.getElementById('confirm-body');
     if (!bodyEl) return;
 
-    if (_allCandidates.length === 0) {
-      bodyEl.innerHTML = '<div class="empty-slot-msg" style="margin:24px 0;">No school submissions found for your zone.</div>';
-      return;
-    }
+    const count = _selections.size;
+    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
 
-    // Group candidates by School Name
-    const bySchool = {};
-    _allCandidates.forEach(c => {
-      const sn = c.schoolName || c.school || 'Unknown School';
-      if (!bySchool[sn]) bySchool[sn] = [];
-      bySchool[sn].push(c);
-    });
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
+    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
+    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
+    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
+    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
 
-    const sections = Object.keys(bySchool).sort().map(school => {
-      const list = bySchool[school];
-      const rows = list.map(p => {
-        const selBadge = _selections.has(p.id)
-          ? '<span style="font-size:9px; font-weight:800; background:var(--db-green-light); color:var(--db-green); padding:2px 6px; border-radius:4px; margin-left:6px;">SELECTED</span>'
-          : '';
-        const sub = p.learnerSubType === 'Technical Skills' ? 'Skills'
-                  : p.learnerSubType === 'Academics / Quiz & Olympiads' ? 'Academics'
-                  : p.participantType === 'Teacher' ? 'Teacher'
-                  : p.participantType === 'Out-of-School Youth' ? 'Youth'
-                  : 'Learner';
-        return `<div style="padding:8px 12px; border-bottom:1px solid #f0f4fa; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
-          <span>
-            <strong style="color:var(--db-navy);">${esc(p.fullName)}</strong>${selBadge}<br>
-            <span style="color:#555;">${sub} &bull; ${esc(p.category || '—')}</span>
-          </span>
-        </div>`;
-      }).join('');
-
-      return `
-        <div class="collapsible-card" style="margin-bottom:10px;">
-          <div class="collapsible-trigger" style="font-size:13px;" onclick="this.nextElementSibling.classList.toggle('hidden')">
-            <span>🏫 ${esc(school)}</span>
-            <span style="font-size:11px; color:var(--db-gray);">${list.length} submission${list.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div class="hidden" style="border-top:1.5px solid #e8eef7;">${rows}</div>
-        </div>`;
-    }).join('');
-
-    const total = _allCandidates.length;
-    const selected = _selections.size;
+    // Empty slots calculation
+    let emptyCount = 64 - count;
 
     bodyEl.innerHTML = `
-      <div style="background:var(--db-navy-light); padding:12px 16px; border-radius:8px; margin-bottom:16px; font-size:13px; line-height:1.6;">
-        <strong>${_auth.zone} Zone — All School Submissions</strong><br>
-        Total: <strong>${total}</strong> &nbsp;|&nbsp; Selected for District: <strong style="color:var(--db-green);">${selected}</strong>
+      <div style="font-size:14px; line-height:1.6; color:#333; margin-bottom:16px;">
+        Are you sure you want to finalize and submit the JETS coordinator selections? 
+        This will freeze these participants as representing your zone at the District Fair.
       </div>
-      ${sections}`;
+      <div style="background:#f8fafe; border:1.5px solid #cbd5e1; border-radius:12px; padding:16px; margin-bottom:20px; font-family:monospace; font-size:13px; line-height:1.6;">
+        <div style="font-weight:bold; color:var(--db-navy); border-bottom:1px solid #cbd5e1; padding-bottom:6px; margin-bottom:8px; font-size:14px; font-family:inherit;">📊 Selection Roster Summary</div>
+        <div>Zone: ${_auth.zone} Zone</div>
+        <div>Coordinator: ${_auth.organiserName}</div>
+        <hr style="border:none; border-top:1px dashed #cbd5e1; margin:6px 0;">
+        <div>• Learner Innovations: ${lInnov} of 27</div>
+        <div>• Teacher Innovations: ${tInnov} of 9</div>
+        <div>• Out-of-School Youth: ${yInnov} of 9</div>
+        <div>• Academics Selection: ${acad} of 7</div>
+        <div>• Technical Skills:    ${sk} of 12</div>
+        <hr style="border:none; border-top:1px dashed #cbd5e1; margin:6px 0;">
+        <strong>TOTAL SELECTIONS: ${count} OF 64</strong><br>
+        <strong style="color:${emptyCount > 0 ? '#e67e22' : '#2ecc71'};">Empty Slots: ${emptyCount}</strong>
+      </div>
+      ${emptyCount > 0 ? `
+        <div style="font-size:11px; background:#fffdf5; border:1px solid #ffeeba; color:#856404; padding:10px; border-radius:8px; line-height:1.4; margin-bottom:20px;">
+          <strong>⚠️ Note on Empty Slots:</strong> Empty slots exist because schools in your zone submitted zero candidate entries for those categories. This is normal and fully acceptable.
+        </div>
+      ` : ''}
+      <div style="display:flex; gap:12px;">
+        <button onclick="ZoneForm.confirmAndSubmit()" id="btn-submit-final" class="db-action-btn db-action-primary" style="flex:2; padding: 14px; font-weight:700; border:none; border-radius:8px; cursor:pointer;">
+          CONFIRM AND SUBMIT
+        </button>
+        <button onclick="ZoneForm.closeDrawer('confirm')" class="db-action-btn db-action-outline" style="flex:1; border:1.5px solid var(--db-navy); color:var(--db-navy); background:#fff; padding: 14px; font-weight:700; border-radius:8px; cursor:pointer;">
+          GO BACK
+        </button>
+      </div>
+    `;
+  }
+
+  // ── Submission write pipeline ────────────────────────────────
+  async function confirmAndSubmit() {
+    if (_submitting) return;
+    _submitting = true;
+
+    const btn = document.getElementById('btn-submit-final');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving selections…';
+    }
+
+    try {
+      const selectedCandidates = _allCandidates.filter(c => _selections.has(c.id));
+      const tsMs = Date.now();
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const zoneRefCode = 'ZON-' + tsMs + '-' + rand;
+
+      // Execute dual-collection writes in parallel
+      const writes = selectedCandidates.map(async (p) => {
+        const isAuto = _autoSelections.has(p.id);
+
+        // Copy original details and add selection flags
+        const selectionData = {
+          ...p,
+          zoneRef: zoneRefCode,
+          selectionType: isAuto ? 'Auto' : 'Manual',
+          selectedBy: _auth.organiserName,
+          selectionTimestamp: new Date().toISOString(),
+          zone: _auth.zone,
+          status: 'Selected'
+        };
+
+        // 1. Write doc to zone_submissions
+        await db.collection('zone_submissions').doc(p.id).set(selectionData);
+
+        // 2. Update doc inside school_submissions
+        await db.collection('school_submissions').doc(p.id).update({
+          zoneSelected: true,
+          zoneRef: zoneRefCode
+        });
+      });
+
+      await Promise.all(writes);
+
+      closeDrawer('confirm');
+      showSuccessScreen(selectedCandidates.length, zoneRefCode);
+
+    } catch (err) {
+      console.error('Final Zonal submit pipeline transaction failed', err);
+      alert('Failed to submit selections. Please check your internet connection.');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'CONFIRM AND SUBMIT';
+      }
+    } finally {
+      _submitting = false;
+    }
+  }
+
+  // Success screen display
+  function showSuccessScreen(total, refCode) {
+    const successPanel = document.getElementById('panel-success');
+    const successBody = document.getElementById('success-card-body');
+    if (!successPanel || !successBody) return;
+
+    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
+    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
+    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
+    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
+    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
+
+    successBody.innerHTML = `
+      <strong>Selections finalized!</strong><br>
+      Reference Code: <code>${refCode}</code><br>
+      Zone Name: ${_auth.zone} Zone<br>
+      Total Finalized: ${total} of 64 slots<br>
+      <hr style="border:none; border-top:1px dashed #cbd5e1; margin:8px 0;">
+      • Learner Innovations: ${lInnov} slots<br>
+      • Teacher Innovations: ${tInnov} slots<br>
+      • Youth Innovations: ${yInnov} slots<br>
+      • Academics Selection: ${acad} slots<br>
+      • Technical Skills: ${sk} slots
+    `;
+
+    successPanel.classList.remove('hidden');
+  }
+
+  // Prefilled WhatsApp completion report generator
+  function sendWhatsApp() {
+    const total = _selections.size;
+    const selectedList = _allCandidates.filter(c => _selections.has(c.id));
+    const lInnov = selectedList.filter(c => isLearnerInnov(c)).length;
+    const tInnov = selectedList.filter(c => c.participantType === 'Teacher').length;
+    const yInnov = selectedList.filter(c => c.participantType === 'Out-of-School Youth').length;
+    const acad   = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Academics / Quiz & Olympiads').length;
+    const sk     = selectedList.filter(c => c.participantType === 'Learner' && c.learnerSubType === 'Technical Skills').length;
+
+    const emptyCount = 64 - total;
+    const dateStr = new Date().toLocaleString();
+
+    const text = `*JETS 2026 — Zone Selection Complete*
+━━━━━━━━━━━━━━━━━━
+*Zone:* ${_auth.zone} Zone
+*Coordinator:* ${_auth.organiserName}
+*Date:* ${dateStr}
+
+*Total Selected:* ${total} of 64 slots
+
+• Learner Innovations: ${lInnov} selected
+• Teacher Innovations: ${tInnov} selected
+• Youth Innovations: ${yInnov} selected
+• Academics Selection: ${acad} selected
+• Technical Skills: ${sk} selected
+
+*Empty slots:* ${emptyCount} (No school submissions)
+
+Contact District JETS Organiser:
+0973375828
+━━━━━━━━━━━━━━━━━━
+Lavushimanda District JETS 2026`;
+
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   }
 
   // ── Global Event Bindings ─────────────────────────────────────
@@ -1990,21 +1943,20 @@ const ZoneForm = (() => {
     toggleInfoCard,
     openSheet,
     closeSheet,
-    back,
-    openLearnerInnovations,
-    openTeacherInnovations,
-    openYouthInnovations,
-    openAcademics,
-    openSkills,
     switchSubTab,
     showCategoryDetail,
+    closeCategoryDetail,
     selectParticipant,
     deselectParticipant,
     showAcadSubjectDetail,
+    closeAcadDetail,
     showSkillCategoryDetail,
+    closeSkillDetail,
     openSummary,
-    openZoneRecords,
-    forceRefresh
+    closeDrawer,
+    openConfirmSubmit,
+    confirmAndSubmit,
+    sendWhatsApp
   };
 
 })();

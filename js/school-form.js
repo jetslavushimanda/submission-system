@@ -4,9 +4,12 @@
 const SchoolForm = (() => {
 
   let _pageId, _auth, _activeMain, _activeSub, _slotTotal;
-  let _submitting = false;
+  let _draftTimer, _restoring = false, _draftListenersAdded = false, _submitting = false;
   let existingSubmissions = [];
+  let fileDataInMemory = { base64: null, name: null, type: null };
   let _bypassDuplicateOnce = false;
+
+  const DRAFT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
   const SKILL_SLUGS = {
     'Civil Engineering':     'civil',
@@ -24,12 +27,16 @@ const SchoolForm = (() => {
     _activeSub  = 'learner';
     _slotTotal  = SLOT_TOTALS[auth.schoolType] || 30;
     
+    fileDataInMemory = { base64: null, name: null, type: null };
     _bypassDuplicateOnce = false;
 
     App.setPageHTML(pageId, buildHTML());
     bindEvents();
+    bindFileChangeEvents();
     loadSlotCount();
     loadProgressData();
+    startAutoSave();
+    checkAndShowDraft();
     fetchExistingSubmissions();
   }
 
@@ -56,6 +63,7 @@ const SchoolForm = (() => {
       <div class="sf-actions">
         <button id="${prefix}-sf-submit" class="btn-form-submit">SUBMIT PARTICIPANT</button>
         <div id="${prefix}-sf-msg" class="sf-msg-container"></div>
+        <div id="${prefix}-sf-draft-indicator" class="draft-indicator"></div>
       </div>
     `;
   }
@@ -213,6 +221,15 @@ const SchoolForm = (() => {
             <label for="l-title">Title of Innovation</label>
             <input type="text" id="l-title" placeholder="Enter title of innovation">
           </div>
+          <div class="field hidden" id="l-report-field">
+            <label for="l-report">Innovation Report</label>
+            <input type="file" id="l-report" accept=".doc,.docx,.pdf">
+            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
+          </div>
+          <div class="field">
+            <label for="l-teacher">Supervising Teacher Name <span class="req">*</span></label>
+            <input type="text" id="l-teacher" placeholder="Full name of supervising teacher">
+          </div>
         </div>
       </div>
     </div>
@@ -245,7 +262,11 @@ const SchoolForm = (() => {
             <label for="t-title">Title of Innovation</label>
             <input type="text" id="t-title" placeholder="Enter title of innovation">
           </div>
-
+          <div class="field">
+            <label for="t-report">Innovation Report</label>
+            <input type="file" id="t-report" accept=".doc,.docx,.pdf">
+            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
+          </div>
         </div>
       </div>
     </div>
@@ -282,7 +303,11 @@ const SchoolForm = (() => {
             <label for="y-title">Title of Innovation</label>
             <input type="text" id="y-title" placeholder="Enter title of innovation">
           </div>
-
+          <div class="field">
+            <label for="y-report">Innovation Report</label>
+            <input type="file" id="y-report" accept=".doc,.docx,.pdf">
+            <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
+          </div>
           <div class="field">
             <label for="y-mentor">Mentor Name <span class="req">*</span></label>
             <input type="text" id="y-mentor" placeholder="Full name of mentor">
@@ -339,6 +364,10 @@ const SchoolForm = (() => {
             <label class="radio-opt"><input type="radio" name="ac-sex" value="Male"> Male</label>
             <label class="radio-opt"><input type="radio" name="ac-sex" value="Female"> Female</label>
           </div>
+        </div>
+        <div class="field">
+          <label for="ac-teacher">Supervising Teacher Name <span class="req">*</span></label>
+          <input type="text" id="ac-teacher" placeholder="Full name of supervising teacher">
         </div>
       </div>
     </div>
@@ -403,6 +432,15 @@ const SchoolForm = (() => {
         <div class="field hidden" id="sk-title-field">
           <label for="sk-title">Title of Innovation</label>
           <input type="text" id="sk-title" placeholder="Enter title of innovation">
+        </div>
+        <div class="field hidden" id="sk-report-field">
+          <label for="sk-report">Innovation Report</label>
+          <input type="file" id="sk-report" accept=".doc,.docx,.pdf">
+          <span class="field-hint">Accepted: .doc .docx .pdf &nbsp;&bull;&nbsp; Max 10 MB</span>
+        </div>
+        <div class="field">
+          <label for="sk-teacher">Supervising Teacher Name <span class="req">*</span></label>
+          <input type="text" id="sk-teacher" placeholder="Full name of supervising teacher">
         </div>
       </div>
     </div>
@@ -660,22 +698,12 @@ const SchoolForm = (() => {
 
     let count = 0;
     existingSubmissions.forEach(s => {
-      const subType = s.learnerSubType || s.type || '';
-      let matchPType;
-      if (pType === 'Academics / Quiz & Olympiads') {
-        matchPType = s.participantType === 'Learner' && subType === 'Academics / Quiz & Olympiads';
-      } else if (pType === 'Technical Skills') {
-        matchPType = s.participantType === 'Learner' && subType === 'Technical Skills';
-      } else {
-        matchPType = s.participantType === pType || (pType === 'Learner' && (s.participantType || '').indexOf('Learner') === 0);
-      }
+      const matchPType = s.participantType === pType || (pType === 'Learner' && (s.participantType || '').indexOf('Learner') === 0);
       const matchCat = s.category === cat;
 
       if (matchPType && matchCat) {
-        if (pType === 'Academics / Quiz & Olympiads') {
-          if (s.level === lvl) count++;
-        } else if (pType === 'Technical Skills') {
-          count++;
+        if (pType.indexOf('Academics') !== -1 || pType.indexOf('Technical Skills') !== -1) {
+          if (s.grade === lvl) count++;
         } else {
           count++;
         }
@@ -746,9 +774,13 @@ const SchoolForm = (() => {
       container.innerHTML = container.dataset[origKey];
       if (submitBtn) submitBtn.disabled = false;
       if (declCard) declCard.classList.remove('hidden');
+      
+      // Re-bind listeners inside restored swappable content (like file inputs)
+      bindFileChangeEvents();
     }
   }
 
+  // ── Learner (Innovation) Cascades ────────────────────────────
   function onLevelChange() {
     const level  = v('l-level');
     const grades = GRADES_BY_LEVEL[level] || [];
@@ -758,7 +790,7 @@ const SchoolForm = (() => {
     gSel.disabled = !grades.length;
     level ? show('l-cat-field') : hide('l-cat-field');
     document.getElementById('l-cat').value = '';
-    hide('l-title-field');
+    hide('l-title-field'); hide('l-report-field');
     
     // Check quota slots
     onInnovCatChange();
@@ -767,6 +799,7 @@ const SchoolForm = (() => {
   function onInnovCatChange() {
     const cat = v('l-cat');
     cat ? show('l-title-field')  : hide('l-title-field');
+    cat ? show('l-report-field') : hide('l-report-field');
     
     handleSlotQuotaAlert('l-swappable-fields', cat, v('l-level'), 'Learner', 'innovations');
   }
@@ -823,6 +856,7 @@ const SchoolForm = (() => {
       sSel.disabled = !subs.length;
     }
     const cosm = cat === 'Cosmetology';
+    cosm ? show('sk-report-field') : hide('sk-report-field');
     cosm ? show('sk-title-field')  : hide('sk-title-field');
     
     handleSlotQuotaAlert('sk-swappable-fields', cat, v('sk-level'), 'Technical Skills', 'skills');
@@ -854,7 +888,8 @@ const SchoolForm = (() => {
 
   function learnerValid() {
     return filled('l-name') && filled('l-age') && rval('l-sex') &&
-           v('l-level') && v('l-grade') && v('l-cat');
+           v('l-level') && v('l-grade') && v('l-cat') &&
+           filled('l-teacher');
   }
 
   function teacherValid() {
@@ -868,17 +903,32 @@ const SchoolForm = (() => {
 
   function academicsValid() {
     return filled('ac-name') && filled('ac-age') && rval('ac-sex') &&
-           v('ac-level') && v('ac-grade') && v('ac-cat');
+           v('ac-level') && v('ac-grade') && v('ac-cat') &&
+           filled('ac-teacher');
   }
 
   function skillsValid() {
     if (!document.getElementById('sk-name')) return false;
     return filled('sk-name') && filled('sk-age') && rval('sk-sex') &&
-           v('sk-level') && v('sk-grade') && v('sk-cat') && v('sk-subskill');
+           v('sk-level') && v('sk-grade') && v('sk-cat') && v('sk-subskill') &&
+           filled('sk-teacher');
+  }
+
+  // ── Duplicate check ──
+  function checkFrontendDuplicate(payload) {
+    const name = payload.fullName.toLowerCase().trim();
+    const cat = (payload.category || '').toLowerCase().trim();
+    const lvl = (payload.level || '').toLowerCase().trim();
+    return existingSubmissions.some(s => 
+      (s.fullName || '').toLowerCase().trim() === name &&
+      (s.category || '').toLowerCase().trim() === cat &&
+      (s.grade || '').toLowerCase().trim() === lvl
+    );
   }
 
   // ── Submit ────────────────────────────────────────────────────
   async function handleSubmit() {
+    if (window.NetStatus && window.NetStatus.isOffline) return;
     if (!showValidationErrors()) return;
 
     const prefix = _activeMain;
@@ -887,13 +937,32 @@ const SchoolForm = (() => {
 
     const payload = collectData();
     
+    // Check duplicates on frontend
+    const isDup = checkFrontendDuplicate(payload);
+    if (isDup && !_bypassDuplicateOnce) {
+      showDuplicateWarningBanner(payload);
+      return;
+    }
+
+    if (_bypassDuplicateOnce) {
+      payload.bypassDuplicate = true;
+      _bypassDuplicateOnce = false;
+    }
+
     _submitting = true;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
     msg.innerHTML = '';
 
     try {
-
+      if (fileDataInMemory.base64) {
+        btn.innerHTML = '<span class="spinner"></span> Uploading Report&hellip;';
+        const fileData = await FirestoreDB.uploadFile(
+          fileDataInMemory.base64, fileDataInMemory.name, fileDataInMemory.type, _auth.phone
+        );
+        if (fileData.status !== 'ok') throw new Error(fileData.message || 'Report upload failed.');
+        payload.fileUrl = fileData.url;
+      }
 
       btn.innerHTML = '<span class="spinner"></span> Submitting&hellip;';
       const data = await FirestoreDB.submitSchool(payload);
@@ -926,6 +995,7 @@ const SchoolForm = (() => {
         </div>`;
 
       _submitting = false;
+      clearDraft();
       loadSlotCount();
       loadProgressData();
       fetchExistingSubmissions();
@@ -949,8 +1019,35 @@ const SchoolForm = (() => {
     }
   }
 
+  function showDuplicateWarningBanner(payload) {
+    const prefix = _activeMain;
+    const msg = document.getElementById(`${prefix}-sf-msg`);
+    msg.innerHTML = `
+      <div class="alert alert-warning">
+        <strong>Duplicate Warning:</strong> ${payload.fullName} is already submitted in category "${payload.category}".
+        <div class="warning-actions-row">
+          <button class="btn-warning-action btn-bypass-dup" onclick="SchoolForm.submitWithBypass()">Submit Anyway</button>
+          <button class="btn-warning-action btn-dismiss-warning" onclick="document.getElementById('${prefix}-sf-msg').innerHTML=''">Cancel</button>
+        </div>
+      </div>`;
+    shakeSubmitBtn(prefix);
+    
+    const sheet = document.getElementById('sheet-' + prefix);
+    if (sheet) {
+      const msgWrap = document.getElementById(`${prefix}-sf-msg`);
+      setTimeout(() => msgWrap.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+    }
+  }
+
+  function submitWithBypass() {
+    _bypassDuplicateOnce = true;
+    handleSubmit();
+  }
+
   function resetAndReuseForm(prefix) {
     resetFormFields();
+    fileDataInMemory = { base64: null, name: null, type: null };
+    _bypassDuplicateOnce = false;
 
     const btn = document.getElementById(`${prefix}-sf-submit`);
     const msg = document.getElementById(`${prefix}-sf-msg`);
@@ -991,7 +1088,7 @@ const SchoolForm = (() => {
       level:              v('l-level'),
       category:           v('l-cat'),
       titleOfInnovation:  v('l-title'),
-      supervisingTeacher: "",
+      supervisingTeacher: v('l-teacher'),
     };
     if (tab === 'teacher') return { ...base,
       participantType:   'Teacher',
@@ -1018,7 +1115,7 @@ const SchoolForm = (() => {
       gradeForm:          v('ac-grade'),
       level:              v('ac-level'),
       category:           v('ac-cat'),
-      supervisingTeacher: "",
+      supervisingTeacher: v('ac-teacher'),
     };
     return { ...base,
       participantType:    'Learner',
@@ -1031,7 +1128,7 @@ const SchoolForm = (() => {
       category:           v('sk-cat'),
       subSkill:           v('sk-subskill'),
       titleOfInnovation:  v('sk-title'),
-      supervisingTeacher: "",
+      supervisingTeacher: v('sk-teacher'),
     };
   }
 
@@ -1170,7 +1267,168 @@ const SchoolForm = (() => {
       </div>`;
   }
 
+  // ── Draft Auto-Save ───────────────────────────────────────────
+  function draftKey() { return 'jets_draft_school_' + _auth.phone; }
 
+  function collectDraftData() {
+    const fields = {};
+    [
+      'l-name','l-age','l-level','l-grade','l-cat','l-title','l-teacher',
+      't-name','t-cat','t-title',
+      'y-name','y-age','y-cat','y-title','y-mentor',
+      'ac-name','ac-age','ac-level','ac-grade','ac-cat','ac-teacher',
+      'sk-name','sk-age','sk-level','sk-grade','sk-cat','sk-subskill','sk-title','sk-teacher',
+    ].forEach(id => { const el = document.getElementById(id); if (el) fields[id] = el.value; });
+    ['l-sex','t-sex','y-sex','ac-sex','sk-sex'].forEach(nm => {
+      const el = document.querySelector(`input[name="${nm}"]:checked`);
+      if (el) fields[nm] = el.value;
+    });
+    
+    // Read checkboxes for current active main tab declaration
+    const prefix = _activeMain;
+    const decl = document.getElementById(`${prefix}-sf-decl`);
+    if (decl) fields[`${prefix}-sf-decl`] = decl.checked;
+
+    const fileNames = {};
+    ['l-report','t-report','y-report','sk-report'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.files && el.files.length > 0) fileNames[id] = el.files[0].name;
+    });
+    return { savedAt: new Date().toISOString(), activeMain: _activeMain, activeSub: _activeSub, fields, fileNames };
+  }
+
+  function saveDraft() {
+    if (_restoring || !document.getElementById(`${_activeMain}-sf-submit`)) return;
+    try { localStorage.setItem(draftKey(), JSON.stringify(collectDraftData())); updateDraftIndicator(); } catch (_) {}
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    const ind = document.getElementById(`${_activeMain}-sf-draft-indicator`);
+    if (ind) ind.textContent = '';
+  }
+
+  function loadDraftData() {
+    try {
+      const raw = localStorage.getItem(draftKey());
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      if (!draft || !draft.savedAt) return null;
+      if (Date.now() - new Date(draft.savedAt).getTime() > DRAFT_EXPIRY_MS) { clearDraft(); return null; }
+      return draft;
+    } catch (_) { return null; }
+  }
+
+  function fmtSavedTime(iso) {
+    const d = new Date(iso);
+    const h = d.getHours(), mi = d.getMinutes(), ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${String(mi).padStart(2, '0')} ${ampm}`;
+  }
+
+  function updateDraftIndicator() {
+    const prefix = _activeMain;
+    const ind = document.getElementById(`${prefix}-sf-draft-indicator`);
+    if (!ind) return;
+    try {
+      const raw = localStorage.getItem(draftKey());
+      if (!raw) { ind.textContent = ''; return; }
+      ind.textContent = 'Draft saved at ' + fmtSavedTime(JSON.parse(raw).savedAt);
+    } catch (_) {}
+  }
+
+  function showDraftBanner(draft) {
+    const body = document.querySelector('#' + _pageId + ' .sf-body');
+    if (!body) return;
+    const banner = document.createElement('div');
+    banner.id = 'sf-draft-banner';
+    banner.className = 'draft-banner';
+    banner.innerHTML = `
+      <div class="draft-banner-top">
+        <span class="draft-banner-msg">Draft restored from ${fmtSavedTime(draft.savedAt)}.</span>
+      </div>
+      <div class="draft-banner-btns">
+        <button class="draft-btn-continue" id="sf-draft-continue">CONTINUE DRAFT</button>
+        <button class="draft-btn-fresh" id="sf-draft-fresh">START FRESH</button>
+      </div>`;
+    body.insertBefore(banner, body.firstChild);
+    document.getElementById('sf-draft-continue').addEventListener('click', () => {
+      restoreDraft(draft);
+      banner.remove();
+      const prefix = _activeMain;
+      const msg = document.getElementById(`${prefix}-sf-msg`);
+      if (msg) msg.innerHTML = '<div class="alert alert-info">Draft loaded. Please re-select your report file.</div>';
+    });
+    document.getElementById('sf-draft-fresh').addEventListener('click', () => {
+      clearDraft();
+      banner.remove();
+    });
+  }
+
+  function restoreDraft(draft) {
+    _restoring = true;
+    const f = draft.fields || {}, fn = draft.fileNames || {};
+    if (draft.activeMain) openSheet(draft.activeMain);
+    if (draft.activeSub)  switchSubTab(draft.activeSub);
+
+    const setVal = (id, val) => { if (val === undefined) return; const el = document.getElementById(id); if (el) el.value = val; };
+    const setRadio = (name, val) => { if (!val) return; const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if (el) el.checked = true; };
+
+    ['l-name','l-age','l-teacher','t-name','t-title','y-name','y-age','y-mentor','y-title',
+     'ac-name','ac-age','ac-teacher','sk-name','sk-age','sk-teacher','sk-title',
+    ].forEach(id => setVal(id, f[id]));
+    ['l-sex','t-sex','y-sex','ac-sex','sk-sex'].forEach(nm => setRadio(nm, f[nm]));
+    setVal('t-cat', f['t-cat']);
+    setVal('y-cat', f['y-cat']);
+
+    if (f['l-level'])    { setVal('l-level', f['l-level']); onLevelChange(); }
+    if (f['l-grade'])    setVal('l-grade', f['l-grade']);
+    if (f['l-cat'])      { setVal('l-cat', f['l-cat']); onInnovCatChange(); }
+    setVal('l-title', f['l-title']);
+
+    if (f['ac-level'])   { setVal('ac-level', f['ac-level']); onAcadLevelChange(); }
+    if (f['ac-grade'])   setVal('ac-grade', f['ac-grade']);
+    if (f['ac-cat'])     setVal('ac-cat', f['ac-cat']);
+
+    if (f['sk-level'])   { setVal('sk-level', f['sk-level']); onSkillLevelChange(); }
+    if (f['sk-grade'])   setVal('sk-grade', f['sk-grade']);
+    if (f['sk-cat'])     { setVal('sk-cat', f['sk-cat']); onSkillCatChange(); }
+    if (f['sk-subskill']) setVal('sk-subskill', f['sk-subskill']);
+
+    const prefix = _activeMain;
+    const decl = document.getElementById(`${prefix}-sf-decl`);
+    if (decl && f[`${prefix}-sf-decl`] !== undefined) decl.checked = f[`${prefix}-sf-decl`];
+
+    ['l-report','t-report','y-report','sk-report'].forEach(id => {
+      if (!fn[id]) return;
+      const el = document.getElementById(id);
+      if (el && !el.parentNode.querySelector('.draft-file-note')) {
+        const note = document.createElement('span');
+        note.className = 'draft-file-note';
+        note.textContent = 'Previously: ' + fn[id];
+        el.parentNode.insertBefore(note, el.nextSibling);
+      }
+    });
+
+    _restoring = false;
+    validateForm();
+    updateDraftIndicator();
+  }
+
+  function startAutoSave() {
+    if (_draftTimer) clearInterval(_draftTimer);
+    _draftTimer = setInterval(saveDraft, 30000);
+    if (!_draftListenersAdded) {
+      document.addEventListener('visibilitychange', saveDraft);
+      window.addEventListener('blur', saveDraft);
+      _draftListenersAdded = true;
+    }
+  }
+
+  function checkAndShowDraft() {
+    const draft = loadDraftData();
+    if (draft) showDraftBanner(draft);
+    updateDraftIndicator();
+  }
 
   // ── Reset form fields after successful submission ─────────────
   function resetFormFields() {
@@ -1278,6 +1536,7 @@ const SchoolForm = (() => {
     if (tab === 'learner') {
       chkFilled('l-name'); chkFilled('l-age'); chkRadio('l-sex');
       chkSel('l-level'); chkSel('l-grade'); chkSel('l-cat');
+      chkFilled('l-teacher');
     } else if (tab === 'teacher') {
       chkFilled('t-name'); chkRadio('t-sex'); chkSel('t-cat');
     } else if (tab === 'youth') {
@@ -1286,9 +1545,11 @@ const SchoolForm = (() => {
     } else if (tab === 'quiz') {
       chkFilled('ac-name'); chkFilled('ac-age'); chkRadio('ac-sex');
       chkSel('ac-level'); chkSel('ac-grade'); chkSel('ac-cat');
+      chkFilled('ac-teacher');
     } else if (tab === 'skills') {
       chkFilled('sk-name'); chkFilled('sk-age'); chkRadio('sk-sex');
       chkSel('sk-level'); chkSel('sk-grade'); chkSel('sk-cat'); chkSel('sk-subskill');
+      chkFilled('sk-teacher');
     }
 
     const declCheckbox = document.getElementById(`${prefix}-sf-decl`);
