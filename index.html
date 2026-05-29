@@ -1,133 +1,878 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#1a5c2a" id="meta-theme-color" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="JETS 2026 Online Submission System — Lavushimanda District, Muchinga Region" />
-  <title>JETS 2026 | Lavushimanda District</title>
-
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/school.css" />
-  <link rel="stylesheet" href="css/zone.css" />
-  <link rel="stylesheet" href="css/dashboard.css" />
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>JETS 2026 — Lavushimanda District</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/school.css">
+  <link rel="stylesheet" href="css/zone.css">
+  <link rel="stylesheet" href="css/district.css">
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════
+     GLOBAL UI
+════════════════════════════════════════════════════════════ -->
+<div id="spinner"><div class="spinner-ring"></div></div>
+<div id="toast"></div>
 
+<!-- confirm dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMsg"></p>
+    <div class="confirm-actions">
+      <button class="btn-yes" id="confirmYes">Delete</button>
+      <button class="btn-no"  id="confirmNo">Cancel</button>
+    </div>
+  </div>
+</div>
 
-  <!-- ═══════════════════════════ LANDING PAGE ═══════════════════════════ -->
-  <div id="page-landing" class="page active">
+<!-- ═══════════════════════════════════════════════════════════
+     LANDING PAGE
+════════════════════════════════════════════════════════════ -->
+<div id="page-landing" class="page active">
+  <div class="land-header">
+    <div class="land-logos">
+      <img src="assets/coat-of-arms.png" alt="Coat of Arms">
+      <img src="assets/jets-logo.png" alt="JETS Logo">
+    </div>
+    <div class="land-title">JETS 2026 SUBMISSION SYSTEM</div>
+  </div>
 
-    <header class="landing-header">
+  <div class="land-body">
+    <div class="land-info">
+      <strong>Lavushimanda District</strong> | Muchinga Region<br>
+      School submissions close: <strong>30 May 2026</strong><br>
+      Zone submissions close: <strong>5 June 2026</strong>
+    </div>
+
+    <div class="login-box">
+      <label for="phoneInput">Enter your phone number</label>
+      <input type="tel" id="phoneInput" placeholder="e.g. 0971234567" autocomplete="tel">
+      <div class="login-error" id="loginError"></div>
+      <button class="btn-proceed" id="btnProceed">PROCEED</button>
+    </div>
+  </div>
+
+  <div class="land-footer">
+    Contact the District JETS Organiser: <strong>0973375828</strong>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCHOOL PAGE
+════════════════════════════════════════════════════════════ -->
+<div id="page-school" class="page">
+  <header class="site-header">
+    <div class="header-top">
       <div class="header-logos">
-        <div class="logo-wrap">
-          <img src="assets/coat-of-arms.png"
-               alt="Zambia Coat of Arms"
-               class="header-logo"
-               onerror="this.classList.add('logo-missing')" />
-        </div>
-
-        <div class="header-title-block">
-          <h1 class="header-title">JETS 2026 SUBMISSION SYSTEM</h1>
-        </div>
-
-        <div class="logo-wrap">
-          <img src="assets/jets-logo.png"
-               alt="JETS Logo"
-               class="header-logo"
-               onerror="this.classList.add('logo-missing')" />
-        </div>
+        <img src="assets/coat-of-arms.png" alt="">
+        <img src="assets/jets-logo.png" alt="">
       </div>
-
-      <p class="header-district">Lavushimanda District &nbsp;|&nbsp; Muchinga Region</p>
-      <p class="header-theme">
-        "Promoting Innovation, Engineering and Entrepreneurship:<br />
-        Accelerating STEM Growth and Development"
-      </p>
-    </header>
-
-    <main class="landing-main">
-
-      <!-- Deadline countdowns — always visible -->
-      <div id="deadline-countdowns" class="deadline-countdowns"></div>
-
-      <!-- Phone verification -->
-      <div class="landing-verify-section">
-        <p class="select-prompt">Enter your registered phone number to continue:</p>
-        <div class="landing-phone-wrap">
-          <input type="tel" id="landing-phone" class="landing-phone-input"
-                 placeholder="e.g. 0971234567" maxlength="15" autocomplete="tel" />
-          <button class="btn-verify" id="btn-verify">Verify</button>
-        </div>
-        <div id="landing-auth-msg"></div>
+      <div class="header-title">
+        JETS 2026 SUBMISSION SYSTEM
+        <small>School Submission Form</small>
       </div>
+    </div>
+    <div class="status-bar">
+      <span class="status-bar-info" id="schoolHeaderInfo"></span>
+      <button class="btn-signout" id="schoolSignOut">Sign Out</button>
+    </div>
+  </header>
 
-      <!-- Welcome statistics — shown after login for School/Zone roles -->
-      <div id="welcome-stats-container" class="hidden"></div>
-
-      <!-- Form buttons — enabled/disabled/hidden based on role after verification -->
-      <button class="btn-submit btn-school-submit btn-disabled" id="btn-open-school" disabled>
-        <span class="btn-title">SCHOOL SUBMISSION</span>
-        <span class="btn-role">School JETS Organiser</span>
+  <!-- Main grid -->
+  <div id="schoolMain">
+    <div class="main-grid">
+      <button class="grid-btn green" id="sBtnLearner">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm0 12.83L4.15 11 12 6.17 19.85 11 12 15.83zM12 16l-7-4v4l7 4 7-4v-4l-7 4z"/></svg>
+        LEARNER
       </button>
-      <div id="school-deadline-msg" class="deadline-msg"></div>
-
-      <button class="btn-submit btn-zone-submit btn-disabled" id="btn-open-zone" disabled>
-        <span class="btn-title">ZONE SELECTION</span>
-        <span class="btn-role">Zonal JETS Coordinator</span>
+      <button class="grid-btn green" id="sBtnTeacher">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        TEACHER
       </button>
-      <div id="zone-deadline-msg" class="deadline-msg"></div>
-
-      <button class="btn-submit btn-dashboard-submit hidden" id="btn-open-dashboard" disabled>
-        <span class="btn-title">DISTRICT DASHBOARD</span>
-        <span class="btn-role">DEC Members &mdash; District Role Only</span>
+      <button class="grid-btn green" id="sBtnYouth">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        YOUTH
       </button>
-
-    </main>
-
-    <footer class="landing-footer">
-      <p class="footer-help">For assistance contact the District JETS Organiser</p>
-      <p class="footer-credit">Ministry of Education &nbsp;&middot;&nbsp; National Science Centre &nbsp;&middot;&nbsp; 2026</p>
-    </footer>
-
-  </div><!-- /#page-landing -->
-
-
-  <!-- ═══════════════════════════ SCHOOL FORM PAGE ═══════════════════════════ -->
-  <div id="page-school" class="page">
-    <!-- Rendered by js/school-form.js -->
+      <button class="grid-btn green" id="sBtnAcademics">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+        ACADEMICS
+      </button>
+      <button class="grid-btn green" id="sBtnSkills">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+        SKILLS
+      </button>
+      <button class="grid-btn green" id="sBtnMySubs">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        MY SUBMISSIONS
+      </button>
+    </div>
   </div>
 
-
-  <!-- ═══════════════════════════ ZONE FORM PAGE ═══════════════════════════ -->
-  <div id="page-zone" class="page">
-    <!-- Rendered by js/zone-form.js -->
+  <!-- Learner sub-tabs -->
+  <div class="sub-screen" id="sScreenLearner">
+    <div class="back-bar">
+      <button class="btn-back" id="sLearnerBack">&#8592;</button>
+      <h2>Learner Innovations</h2>
+    </div>
+    <div class="sub-buttons">
+      <button class="sub-btn green" id="sBtnEce">ECE &amp; Primary</button>
+      <button class="sub-btn green" id="sBtnJunior">Junior Secondary</button>
+      <button class="sub-btn green" id="sBtnSenior">Senior Secondary</button>
+    </div>
   </div>
 
-
-  <!-- ═══════════════════════════ DASHBOARD PAGE ═══════════════════════════ -->
-  <div id="page-dashboard" class="page">
-    <!-- Rendered by js/app.js showDashboard() -->
+  <!-- ECE form -->
+  <div class="sub-screen" id="sScreenEce">
+    <div class="back-bar">
+      <button class="btn-back" id="sEceBack">&#8592;</button>
+      <h2>ECE &amp; Primary — Learner</h2>
+    </div>
+    <div id="sEceSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sEceAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sEceForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sEceName">
+        <div class="field-err" id="sEceNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sEceAge" min="3" max="30">
+        <div class="field-err" id="sEceAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sEceSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sEceSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Grade *</label>
+        <select id="sEceGrade">
+          <option value="">— Select —</option>
+          <option>Level 1</option><option>Level 2</option>
+          <option>Grade 1</option><option>Grade 2</option><option>Grade 3</option>
+          <option>Grade 4</option><option>Grade 5</option><option>Grade 6</option><option>Grade 7</option>
+        </select>
+        <div class="field-err" id="sEceGradeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Category *</label>
+        <select id="sEceCategory">
+          <option value="">— Select —</option>
+          <option>Agricultural Science Innovations</option>
+          <option>Chemistry Innovations</option>
+          <option>Physics &amp; Renewable Energy Innovations</option>
+          <option>Computer Science &amp; Software Development Innovations</option>
+          <option>Mathematics Innovations</option>
+          <option>Medicine &amp; Health Innovations</option>
+          <option>Robotics &amp; Artificial Intelligence Innovations</option>
+          <option>Food Science, Technology &amp; Hospitality Innovations</option>
+          <option>Environmental Sustainable Development Innovations</option>
+        </select>
+        <div class="field-err" id="sEceCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Innovation Title *</label>
+        <input type="text" id="sEceTitle">
+        <div class="field-err" id="sEceTitleErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sEceDeclRow">
+        <input type="checkbox" id="sEceDecl">
+        <label for="sEceDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sEceDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sEceSubmit">SUBMIT</button>
+    </div>
   </div>
 
+  <!-- Junior form -->
+  <div class="sub-screen" id="sScreenJunior">
+    <div class="back-bar">
+      <button class="btn-back" id="sJuniorBack">&#8592;</button>
+      <h2>Junior Secondary — Learner</h2>
+    </div>
+    <div id="sJuniorSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sJuniorAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sJuniorForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sJuniorName">
+        <div class="field-err" id="sJuniorNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sJuniorAge" min="3" max="30">
+        <div class="field-err" id="sJuniorAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sJuniorSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sJuniorSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Grade *</label>
+        <select id="sJuniorGrade">
+          <option value="">— Select —</option>
+          <option>Form 1</option><option>Form 2</option>
+        </select>
+        <div class="field-err" id="sJuniorGradeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Category *</label>
+        <select id="sJuniorCategory">
+          <option value="">— Select —</option>
+          <option>Agricultural Science Innovations</option>
+          <option>Chemistry Innovations</option>
+          <option>Physics &amp; Renewable Energy Innovations</option>
+          <option>Computer Science &amp; Software Development Innovations</option>
+          <option>Mathematics Innovations</option>
+          <option>Medicine &amp; Health Innovations</option>
+          <option>Robotics &amp; Artificial Intelligence Innovations</option>
+          <option>Food Science, Technology &amp; Hospitality Innovations</option>
+          <option>Environmental Sustainable Development Innovations</option>
+        </select>
+        <div class="field-err" id="sJuniorCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Innovation Title *</label>
+        <input type="text" id="sJuniorTitle">
+        <div class="field-err" id="sJuniorTitleErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sJuniorDeclRow">
+        <input type="checkbox" id="sJuniorDecl">
+        <label for="sJuniorDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sJuniorDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sJuniorSubmit">SUBMIT</button>
+    </div>
+  </div>
 
-  <!-- ═══════════════════════════ SCRIPTS ═══════════════════════════════ -->
-  <!-- Firebase SDK (compat build — no bundler needed) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <!-- Senior form -->
+  <div class="sub-screen" id="sScreenSenior">
+    <div class="back-bar">
+      <button class="btn-back" id="sSeniorBack">&#8592;</button>
+      <h2>Senior Secondary — Learner</h2>
+    </div>
+    <div id="sSeniorSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sSeniorAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sSeniorForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sSeniorName">
+        <div class="field-err" id="sSeniorNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sSeniorAge" min="3" max="30">
+        <div class="field-err" id="sSeniorAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sSeniorSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sSeniorSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Grade *</label>
+        <select id="sSeniorGrade">
+          <option value="">— Select —</option>
+          <option>Grade 10</option><option>Grade 11</option><option>Grade 12</option>
+        </select>
+        <div class="field-err" id="sSeniorGradeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Category *</label>
+        <select id="sSeniorCategory">
+          <option value="">— Select —</option>
+          <option>Agricultural Science Innovations</option>
+          <option>Chemistry Innovations</option>
+          <option>Physics &amp; Renewable Energy Innovations</option>
+          <option>Computer Science &amp; Software Development Innovations</option>
+          <option>Mathematics Innovations</option>
+          <option>Medicine &amp; Health Innovations</option>
+          <option>Robotics &amp; Artificial Intelligence Innovations</option>
+          <option>Food Science, Technology &amp; Hospitality Innovations</option>
+          <option>Environmental Sustainable Development Innovations</option>
+        </select>
+        <div class="field-err" id="sSeniorCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Innovation Title *</label>
+        <input type="text" id="sSeniorTitle">
+        <div class="field-err" id="sSeniorTitleErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sSeniorDeclRow">
+        <input type="checkbox" id="sSeniorDecl">
+        <label for="sSeniorDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sSeniorDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sSeniorSubmit">SUBMIT</button>
+    </div>
+  </div>
 
-  <script src="js/data.js"></script>
-  <script src="js/firebase.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/welcome-stats.js"></script>
-  <script src="js/history.js"></script>
-  <script src="js/school-form.js"></script>
-  <script src="js/zone-form.js"></script>
-  <script src="js/dashboard.js"></script>
+  <!-- Teacher form -->
+  <div class="sub-screen" id="sScreenTeacher">
+    <div class="back-bar">
+      <button class="btn-back" id="sTeacherBack">&#8592;</button>
+      <h2>Teacher Innovation</h2>
+    </div>
+    <div id="sTeacherSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sTeacherAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sTeacherForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sTeacherName">
+        <div class="field-err" id="sTeacherNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sTeacherSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sTeacherSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Category *</label>
+        <select id="sTeacherCategory">
+          <option value="">— Select —</option>
+          <option>Agricultural Science Innovations</option>
+          <option>Chemistry Innovations</option>
+          <option>Physics &amp; Renewable Energy Innovations</option>
+          <option>Computer Science &amp; Software Development Innovations</option>
+          <option>Mathematics Innovations</option>
+          <option>Medicine &amp; Health Innovations</option>
+          <option>Robotics &amp; Artificial Intelligence Innovations</option>
+          <option>Food Science, Technology &amp; Hospitality Innovations</option>
+          <option>Environmental Sustainable Development Innovations</option>
+        </select>
+        <div class="field-err" id="sTeacherCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Innovation Title *</label>
+        <input type="text" id="sTeacherTitle">
+        <div class="field-err" id="sTeacherTitleErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sTeacherDeclRow">
+        <input type="checkbox" id="sTeacherDecl">
+        <label for="sTeacherDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sTeacherDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sTeacherSubmit">SUBMIT</button>
+    </div>
+  </div>
 
+  <!-- Youth form -->
+  <div class="sub-screen" id="sScreenYouth">
+    <div class="back-bar">
+      <button class="btn-back" id="sYouthBack">&#8592;</button>
+      <h2>Youth Innovation</h2>
+    </div>
+    <div id="sYouthSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sYouthAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sYouthForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sYouthName">
+        <div class="field-err" id="sYouthNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sYouthAge" min="3" max="35">
+        <div class="field-err" id="sYouthAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sYouthSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sYouthSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Category *</label>
+        <select id="sYouthCategory">
+          <option value="">— Select —</option>
+          <option>Agricultural Science Innovations</option>
+          <option>Chemistry Innovations</option>
+          <option>Physics &amp; Renewable Energy Innovations</option>
+          <option>Computer Science &amp; Software Development Innovations</option>
+          <option>Mathematics Innovations</option>
+          <option>Medicine &amp; Health Innovations</option>
+          <option>Robotics &amp; Artificial Intelligence Innovations</option>
+          <option>Food Science, Technology &amp; Hospitality Innovations</option>
+          <option>Environmental Sustainable Development Innovations</option>
+        </select>
+        <div class="field-err" id="sYouthCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Innovation Title *</label>
+        <input type="text" id="sYouthTitle">
+        <div class="field-err" id="sYouthTitleErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Mentor Name *</label>
+        <input type="text" id="sYouthMentor">
+        <div class="field-err" id="sYouthMentorErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sYouthDeclRow">
+        <input type="checkbox" id="sYouthDecl">
+        <label for="sYouthDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sYouthDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sYouthSubmit">SUBMIT</button>
+    </div>
+  </div>
+
+  <!-- Academics form -->
+  <div class="sub-screen" id="sScreenAcademics">
+    <div class="back-bar">
+      <button class="btn-back" id="sAcademicsBack">&#8592;</button>
+      <h2>Academics</h2>
+    </div>
+    <div id="sAcademicsSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sAcademicsAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sAcademicsForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sAcadName">
+        <div class="field-err" id="sAcadNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sAcadAge" min="3" max="30">
+        <div class="field-err" id="sAcadAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sAcadSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sAcadSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Level *</label>
+        <select id="sAcadLevel">
+          <option value="">— Select —</option>
+        </select>
+        <div class="field-err" id="sAcadLevelErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Grade *</label>
+        <select id="sAcadGrade">
+          <option value="">— Select —</option>
+        </select>
+        <div class="field-err" id="sAcadGradeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Subject *</label>
+        <select id="sAcadSubject">
+          <option value="">— Select Level first —</option>
+        </select>
+        <div class="field-err" id="sAcadSubjectErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sAcadDeclRow">
+        <input type="checkbox" id="sAcadDecl">
+        <label for="sAcadDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sAcadDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sAcadSubmit">SUBMIT</button>
+    </div>
+  </div>
+
+  <!-- Skills (hidden for Primary/Community) -->
+  <div class="sub-screen" id="sScreenSkills">
+    <div class="back-bar">
+      <button class="btn-back" id="sSkillsBack">&#8592;</button>
+      <h2>Technical Skills</h2>
+    </div>
+    <div id="sSkillsNotice" class="skills-notice" style="display:none">
+      Technical Skills not available for this school type.
+    </div>
+    <div id="sSkillsSuccess" class="success-banner"></div>
+    <button class="btn-another" id="sSkillsAnother">SUBMIT ANOTHER</button>
+    <div class="form-wrap" id="sSkillsForm">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="sSkillName">
+        <div class="field-err" id="sSkillNameErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="sSkillAge" min="3" max="30">
+        <div class="field-err" id="sSkillAgeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sex *</label>
+        <select id="sSkillSex">
+          <option value="">— Select —</option>
+          <option>Male</option><option>Female</option>
+        </select>
+        <div class="field-err" id="sSkillSexErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Level *</label>
+        <select id="sSkillLevel">
+          <option value="">— Select —</option>
+          <option>Junior Secondary</option><option>Senior Secondary</option>
+        </select>
+        <div class="field-err" id="sSkillLevelErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Grade *</label>
+        <select id="sSkillGrade">
+          <option value="">— Select Level first —</option>
+        </select>
+        <div class="field-err" id="sSkillGradeErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Skill Category *</label>
+        <select id="sSkillCategory">
+          <option value="">— Select —</option>
+          <option>Civil Engineering</option>
+          <option>Mechanical Engineering</option>
+          <option>Electronics Services</option>
+          <option>Fashion Technology</option>
+          <option>Cosmetology</option>
+        </select>
+        <div class="field-err" id="sSkillCategoryErr">This field is required.</div>
+      </div>
+      <div class="form-group">
+        <label>Sub-Skill *</label>
+        <select id="sSkillSubSkill">
+          <option value="">— Select Category first —</option>
+        </select>
+        <div class="field-err" id="sSkillSubSkillErr">This field is required.</div>
+      </div>
+      <div class="checkbox-row" id="sSkillDeclRow">
+        <input type="checkbox" id="sSkillDecl">
+        <label for="sSkillDecl">I declare that the information provided is true and correct.</label>
+      </div>
+      <div class="field-err" id="sSkillDeclErr">You must accept the declaration.</div>
+      <button class="btn-submit" id="sSkillSubmit">SUBMIT</button>
+    </div>
+  </div>
+
+  <!-- My Submissions -->
+  <div class="sub-screen" id="sScreenMySubs">
+    <div class="back-bar">
+      <button class="btn-back" id="sMySubsBack">&#8592;</button>
+      <h2>My Submissions</h2>
+    </div>
+    <div id="sMySubsContent"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ZONE PAGE
+════════════════════════════════════════════════════════════ -->
+<div id="page-zone" class="page">
+  <header class="site-header zone-header">
+    <div class="header-top">
+      <div class="header-logos">
+        <img src="assets/coat-of-arms.png" alt="">
+        <img src="assets/jets-logo.png" alt="">
+      </div>
+      <div class="header-title">
+        JETS 2026 SUBMISSION SYSTEM
+        <small>Zone Selection Form</small>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span class="status-bar-info" id="zoneHeaderInfo"></span>
+      <button class="btn-signout" id="zoneSignOut">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Main grid -->
+  <div id="zoneMain">
+    <div class="main-grid">
+      <button class="grid-btn blue" id="zBtnLearner">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
+        LEARNER
+      </button>
+      <button class="grid-btn blue" id="zBtnTeacher">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        TEACHER
+      </button>
+      <button class="grid-btn blue" id="zBtnYouth">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        YOUTH
+      </button>
+      <button class="grid-btn blue" id="zBtnAcademics">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+        ACADEMICS
+      </button>
+      <button class="grid-btn blue" id="zBtnSkills">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+        SKILLS
+      </button>
+      <button class="grid-btn blue" id="zBtnSelected" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        SELECTED
+        <span class="badge" id="zSelectedBadge">0/64</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Zone Learner sub-tabs -->
+  <div class="sub-screen" id="zScreenLearner">
+    <div class="back-bar">
+      <button class="btn-back" id="zLearnerBack">&#8592;</button>
+      <h2>Learner Innovations</h2>
+    </div>
+    <div class="sub-buttons">
+      <button class="sub-btn blue" id="zBtnEce">ECE &amp; Primary</button>
+      <button class="sub-btn blue" id="zBtnJunior">Junior Secondary</button>
+      <button class="sub-btn blue" id="zBtnSenior">Senior Secondary</button>
+    </div>
+  </div>
+
+  <!-- Zone ECE screen -->
+  <div class="sub-screen" id="zScreenEce">
+    <div class="back-bar">
+      <button class="btn-back" id="zEceBack">&#8592;</button>
+      <h2>ECE &amp; Primary — Innovations</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zEceContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Junior screen -->
+  <div class="sub-screen" id="zScreenJunior">
+    <div class="back-bar">
+      <button class="btn-back" id="zJuniorBack">&#8592;</button>
+      <h2>Junior Secondary — Innovations</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zJuniorContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Senior screen -->
+  <div class="sub-screen" id="zScreenSenior">
+    <div class="back-bar">
+      <button class="btn-back" id="zSeniorBack">&#8592;</button>
+      <h2>Senior Secondary — Innovations</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zSeniorContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Teacher screen -->
+  <div class="sub-screen" id="zScreenTeacher">
+    <div class="back-bar">
+      <button class="btn-back" id="zTeacherBack">&#8592;</button>
+      <h2>Teacher Innovations</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zTeacherContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Youth screen -->
+  <div class="sub-screen" id="zScreenYouth">
+    <div class="back-bar">
+      <button class="btn-back" id="zYouthBack">&#8592;</button>
+      <h2>Youth Innovations</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zYouthContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Academics screen -->
+  <div class="sub-screen" id="zScreenAcademics">
+    <div class="back-bar">
+      <button class="btn-back" id="zAcademicsBack">&#8592;</button>
+      <h2>Academics</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zAcademicsContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Zone Skills screen -->
+  <div class="sub-screen" id="zScreenSkills">
+    <div class="back-bar">
+      <button class="btn-back" id="zSkillsBack">&#8592;</button>
+      <h2>Technical Skills</h2>
+    </div>
+    <div style="padding:0 16px 24px" id="zSkillsContent"><div class="sec-spinner">Loading…</div></div>
+  </div>
+
+  <!-- Selected drawer -->
+  <div class="drawer-overlay" id="zSelectedOverlay">
+    <div class="drawer" id="zSelectedDrawer">
+      <div class="drawer-hdr">
+        <h2>Selected for District</h2>
+        <button class="btn-close" id="zSelectedClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="zSelectedBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     DISTRICT PAGE
+════════════════════════════════════════════════════════════ -->
+<div id="page-district" class="page">
+  <header class="site-header district-header">
+    <div class="header-top">
+      <div class="header-logos">
+        <img src="assets/coat-of-arms.png" alt="">
+        <img src="assets/jets-logo.png" alt="">
+      </div>
+      <div class="header-title">
+        JETS 2026 DISTRICT DASHBOARD
+        <small>Lavushimanda District</small>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span class="status-bar-info"></span>
+      <button class="btn-signout" id="districtSignOut">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <button class="grid-btn blue" id="dBtnSchools">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
+      SCHOOL DATA
+    </button>
+    <button class="grid-btn blue" id="dBtnZones">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      ZONE SELECTIONS
+    </button>
+    <button class="grid-btn orange" id="dBtnCategory">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+      BY CATEGORY
+    </button>
+    <button class="grid-btn orange" id="dBtnRecent">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      RECENT
+    </button>
+    <button class="grid-btn blue" id="dBtnAdmin">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      ADMIN
+    </button>
+    <button class="grid-btn orange" id="dBtnSettings">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+      SETTINGS
+    </button>
+  </div>
+
+  <!-- School Data drawer -->
+  <div class="drawer-overlay" id="dSchoolsOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>School Participation</h2>
+        <button class="btn-close" id="dSchoolsClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dSchoolsBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Zone Selections drawer -->
+  <div class="drawer-overlay" id="dZonesOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>Zone Selections</h2>
+        <button class="btn-close" id="dZonesClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dZonesBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Zone detail view (inside zone drawer) -->
+  <div class="drawer-overlay" id="dZoneDetailOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2 id="dZoneDetailTitle">Zone</h2>
+        <button class="btn-close" id="dZoneDetailClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dZoneDetailBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- By Category drawer -->
+  <div class="drawer-overlay" id="dCategoryOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>Category Coverage</h2>
+        <button class="btn-close" id="dCategoryClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dCategoryBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Recent drawer -->
+  <div class="drawer-overlay" id="dRecentOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>Recent Submissions</h2>
+        <button class="btn-close" id="dRecentClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dRecentBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Admin drawer -->
+  <div class="drawer-overlay" id="dAdminOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>Manage Organisers</h2>
+        <button class="btn-close" id="dAdminClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dAdminBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Settings drawer -->
+  <div class="drawer-overlay" id="dSettingsOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2>Deadline Settings</h2>
+        <button class="btn-close" id="dSettingsClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dSettingsBody"><div class="sec-spinner">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- School submissions view (district) -->
+  <div class="drawer-overlay" id="dSchoolDetailOverlay">
+    <div class="drawer">
+      <div class="drawer-hdr">
+        <h2 id="dSchoolDetailTitle">School</h2>
+        <button class="btn-close" id="dSchoolDetailClose">&times;</button>
+      </div>
+      <div class="drawer-body" id="dSchoolDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Admin modal -->
+  <div class="modal-overlay" id="dAdminModal">
+    <div class="modal">
+      <div class="modal-hdr">
+        <h3 id="dAdminModalTitle">Add Organiser</h3>
+        <button class="btn-close" id="dAdminModalClose">&times;</button>
+      </div>
+      <div class="modal-body" id="dAdminModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/school.js"></script>
+<script src="js/zone.js"></script>
+<script src="js/district.js"></script>
 </body>
 </html>

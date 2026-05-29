@@ -1,0 +1,15 @@
+/* District dashboard — navy theme */
+#page-district .site-header { background: #1a3c6e; }
+#page-district .grid-btn.orange { background: #e67e22; }
+#page-district .grid-btn.blue   { background: #1a3c6e; }
+
+.zone-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #1a3c6e;
+  color: #fff;
+}
+.zone-badge.full { background: #1a5c2a; }

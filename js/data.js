@@ -1,85 +1,49 @@
 const ZONES = {
-  "Mpumba": {
-    centre: "Kapengwe",
+  Mpumba: {
     schools: [
-      { name: "Mununga Primary", type: "Primary School" },
-      { name: "Mpumba Primary", type: "Primary School" },
-      { name: "Mwenda Primary", type: "Primary School" },
-      { name: "Kapengwe Open Centre", type: "Open Centre School" },
-      { name: "Salamo Primary", type: "Primary School" },
-      { name: "Tubondo Primary", type: "Primary School" },
-      { name: "Muchelenje Open Centre", type: "Open Centre School" },
-      { name: "Mununga Secondary", type: "Secondary School" },
-      { name: "Salamo Secondary", type: "Secondary School" },
-      { name: "Red Rhino Secondary", type: "Secondary School" },
-      { name: "Khem Private School", type: "Private School" },
-      { name: "St. Rochester Private School", type: "Private School" }
+      "Mununga Primary","Mpumba Primary","Mwenda Primary","Kapengwe Open Centre",
+      "Salamo Primary","Tubondo Primary","Muchelenje Open Centre","Mununga Secondary",
+      "Salamo Secondary","Red Rhino Secondary"
     ]
   },
-  "Chiundaponde": {
-    centre: "Chiundaponde",
+  Chiundaponde: {
     schools: [
-      { name: "Chiundaponde Primary", type: "Primary School" },
-      { name: "Lulimala Primary", type: "Primary School" },
-      { name: "Chifinshi Primary", type: "Primary School" },
-      { name: "Makanga Primary", type: "Primary School" },
-      { name: "Ngweshi Primary", type: "Primary School" },
-      { name: "Chiundaponde Secondary", type: "Secondary School" }
+      "Chiundaponde Primary","Lulimala Primary","Chifinshi Primary","Makanga Primary",
+      "Ngweshi Primary","Chiundaponde Secondary"
     ]
   },
-  "Lukulu": {
-    centre: "Lukulu",
+  Lukulu: {
     schools: [
-      { name: "Kapololo Primary", type: "Primary School" },
-      { name: "Kapwanya Primary", type: "Primary School" },
-      { name: "Mabonga Primary", type: "Primary School" },
-      { name: "Lukulu Primary", type: "Primary School" },
-      { name: "Nsansha Primary", type: "Primary School" },
-      { name: "Mpomfu Primary", type: "Primary School" },
-      { name: "Chito Primary", type: "Primary School" },
-      { name: "Lukulu Day Secondary", type: "Secondary School" }
+      "Kapololo Primary","Kapwanya Primary","Mabonga Primary","Lukulu Primary",
+      "Nsansha Primary","Mpomfu Primary","Chito Primary","Lukulu Day Secondary"
     ]
   },
-  "Kalonje": {
-    centre: "Kalonje",
+  Kalonje: {
     schools: [
-      { name: "Mupamadzi Open Centre", type: "Open Centre School" },
-      { name: "Chilebela Primary", type: "Primary School" },
-      { name: "Kamwendo Primary", type: "Primary School" },
-      { name: "Mutumba Community School", type: "Community School" },
-      { name: "Kalonje Primary", type: "Primary School" },
-      { name: "Mabyulu Primary", type: "Primary School" },
-      { name: "Finkuli Open Centre", type: "Open Centre School" },
-      { name: "Kalonje Secondary", type: "Secondary School" }
+      "Mupamadzi Open Centre","Chilebela Primary","Kamwendo Primary",
+      "Mutumba Community School","Kalonje Primary","Mabyulu Primary",
+      "Finkuli Open Centre","Kalonje Secondary"
     ]
   },
-  "Mwelushi": {
-    centre: "Muwele",
+  Mwelushi: {
     schools: [
-      { name: "Mwila Chilembwe Primary", type: "Primary School" },
-      { name: "Mwendachabe Primary", type: "Primary School" },
-      { name: "Chipelembe Primary", type: "Primary School" },
-      { name: "Kapilya Open Centre", type: "Open Centre School" },
-      { name: "Mwelushi Primary", type: "Primary School" },
-      { name: "Muwele Primary", type: "Primary School" },
-      { name: "Milomfi Primary", type: "Primary School" },
-      { name: "Chibali Primary", type: "Primary School" }
+      "Mwila Chilembwe Primary","Mwendachabe Primary","Chipelembe Primary",
+      "Kapilya Open Centre","Mwelushi Primary","Muwele Primary","Milomfi Primary","Chibali Primary"
     ]
   }
 };
 
-const GRADES_BY_LEVEL = {
-  "ECE & Primary":    ["Level 1", "Level 2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7"],
-  "Junior Secondary": ["Form 1", "Form 2"],
-  "Senior Secondary": ["Grade 10", "Grade 11", "Grade 12"]
+const LEVELS_BY_TYPE = {
+  "Primary School": ["ECE & Primary"],
+  "Open Centre School": ["ECE & Primary","Junior Secondary"],
+  "Secondary School": ["Junior Secondary","Senior Secondary"],
+  "Community School": ["ECE & Primary"]
 };
 
-const LEVELS_BY_SCHOOL_TYPE = {
-  "Primary School":     ["ECE & Primary"],
-  "Open Centre School": ["ECE & Primary", "Junior Secondary"],
-  "Secondary School":   ["Junior Secondary", "Senior Secondary"],
-  "Private School":     ["ECE & Primary", "Junior Secondary", "Senior Secondary"],
-  "Community School":   ["ECE & Primary"]
+const GRADES_BY_LEVEL = {
+  "ECE & Primary": ["Level 1","Level 2","Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7"],
+  "Junior Secondary": ["Form 1","Form 2"],
+  "Senior Secondary": ["Grade 10","Grade 11","Grade 12"]
 };
 
 const INNOVATION_CATEGORIES = [
@@ -95,51 +59,30 @@ const INNOVATION_CATEGORIES = [
 ];
 
 const ACADEMICS_BY_LEVEL = {
-  "ECE & Primary":    ["Quiz & Olympiads — Mathematics", "Quiz & Olympiads — Science", "Quiz & Olympiads — CTS"],
-  "Junior Secondary": ["Quiz & Olympiads — Physics/Mathematics", "Quiz & Olympiads — Biology/Chemistry"],
-  "Senior Secondary": ["Quiz & Olympiads — Physics/Mathematics", "Quiz & Olympiads — Biology/Chemistry"]
+  "ECE & Primary": ["Mathematics","Science","CTS"],
+  "Junior Secondary": ["Physics/Mathematics","Biology/Chemistry"],
+  "Senior Secondary": ["Physics/Mathematics","Biology/Chemistry"]
 };
 
 const SKILLS = {
   "Civil Engineering": {
-    subSkills: ["Wall & Floor Tiling", "Landscape & Gardening", "Bricklaying & Plastering"],
-    slots: 4,
-    requiresReport: false
+    subSkills: ["Wall & Floor Tiling","Landscape & Gardening","Bricklaying & Plastering"],
+    max: 4
   },
   "Mechanical Engineering": {
-    subSkills: ["Welding", "Carpentry & Joinery", "Electrical Installations", "Panel Beating", "Spray Painting"],
-    slots: 4,
-    requiresReport: false
+    subSkills: ["Welding","Carpentry & Joinery","Electrical Installations","Panel Beating","Spray Painting"],
+    max: 4
   },
   "Electronics Services": {
-    subSkills: ["Wearable Technology", "Communication Technology", "Industrial Electronics", "Repair & Maintenance"],
-    slots: 2,
-    requiresReport: false
+    subSkills: ["Wearable Technology","Communication Technology","Industrial Electronics","Repair & Maintenance"],
+    max: 2
   },
   "Fashion Technology": {
-    subSkills: ["Design & Innovation", "Sustainable Practices", "Manufacturing & Production"],
-    slots: 1,
-    requiresReport: false
+    subSkills: ["Design & Innovation","Sustainable Practices","Manufacturing & Production"],
+    max: 1
   },
   "Cosmetology": {
-    subSkills: ["Hairstyling", "Skincare", "Nail Care", "Makeup Application"],
-    slots: 1,
-    requiresReport: true
+    subSkills: ["Hairstyling","Skincare","Nail Care","Makeup Application"],
+    max: 1
   }
 };
-
-const SLOT_TOTALS = {
-  "Primary School": 30,
-  "Open Centre School": 53,
-  "Secondary School": 52,
-  "Private School": 52,
-  "Community School": 30
-};
-
-function requiresReport(participantType, skillCategory = null) {
-  if (participantType === "Learner Innovation") return true;
-  if (participantType === "Teacher") return true;
-  if (participantType === "Out-of-School Youth") return true;
-  if (participantType === "Technical Skills" && skillCategory === "Cosmetology") return true;
-  return false;
-}
